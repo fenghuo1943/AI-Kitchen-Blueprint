@@ -1,5 +1,5 @@
 <template>
-  <div class="recipe-card" @click="openDetail">
+  <div class="recipe-card" :class="{ 'no-summary': hideSummary }" @click="openDetail">
     <div class="recipe-cover" v-if="recipe.cover">
       <img :src="recipe.cover" :alt="recipe.title" />
     </div>
@@ -9,14 +9,14 @@
           <h3 class="recipe-title">{{ recipe.title }}</h3>
           <span v-if="recipe.is_in_today_menu" class="in-menu-badge">今日菜单</span>
         </div>
-        <p v-if="recipe.summary" class="recipe-summary">{{ recipe.summary }}</p>
+        <p v-if="recipe.summary && !hideSummary" class="recipe-summary">{{ recipe.summary }}</p>
         <div class="recipe-meta">
           <span v-if="totalMinutes">⏱️ {{ totalMinutes }}分钟</span>
           <span v-if="recipe.difficulty">📊 {{ recipe.difficulty }}</span>
           <span v-if="recipe.cooked_count">🔥 做过{{ recipe.cooked_count }}次</span>
         </div>
       </div>
-      <div class="recipe-actions" @click.stop>
+      <div class="recipe-actions" :class="{ 'actions-row': actionsHorizontal }" @click.stop>
         <button
           :class="['btn-small', recipe.is_favorited ? 'btn-cancel' : 'btn-confirm']"
           @click="toggleFavorite"
@@ -38,7 +38,11 @@ import type { Recipe, DiscoverRecipe } from '../types';
 
 type RecipeCardItem = Recipe | DiscoverRecipe;
 
-const props = defineProps<{ recipe: RecipeCardItem }>();
+const props = defineProps<{
+  recipe: RecipeCardItem;
+  hideSummary?: boolean;
+  actionsHorizontal?: boolean;
+}>();
 const emit = defineEmits<{
   (e: 'favorite', recipe: RecipeCardItem): void;
   (e: 'menu', recipe: RecipeCardItem): void;
@@ -227,6 +231,22 @@ function openAddMenu() {
     flex-direction: column;
     margin-top: 0;
     flex-shrink: 0;
+  }
+  .recipe-actions.actions-row {
+    flex-direction: row;
+    align-items: center;
+  }
+  /* 无简介（发现页）时，按钮左侧区域合并为单列，名称占满整行 */
+  .recipe-card.no-summary .recipe-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .recipe-card.no-summary .recipe-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
   }
 }
 </style>

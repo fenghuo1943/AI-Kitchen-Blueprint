@@ -15,6 +15,8 @@
           v-for="recipe in today"
           :key="recipe.id"
           :recipe="recipe"
+          hide-summary
+          actions-horizontal
           @favorite="toggleFavorite"
           @menu="openAddMenu"
         />
@@ -33,6 +35,8 @@
           v-for="recipe in randomRecipes"
           :key="recipe.id"
           :recipe="recipe"
+          hide-summary
+          actions-horizontal
           @favorite="toggleFavorite"
           @menu="openAddMenu"
         />
@@ -49,6 +53,8 @@
           v-for="recipe in hot"
           :key="recipe.id"
           :recipe="recipe"
+          hide-summary
+          actions-horizontal
           @favorite="toggleFavorite"
           @menu="openAddMenu"
         />
@@ -66,6 +72,8 @@
           v-for="recipe in latest"
           :key="recipe.id"
           :recipe="recipe"
+          hide-summary
+          actions-horizontal
           @favorite="toggleFavorite"
           @menu="openAddMenu"
         />
@@ -168,6 +176,6 @@ onMounted(loadAll);
 
 @media (max-width: 767px) {
   .discover { padding: 16px; }
-  .card-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card-grid { grid-template-columns: 1fr; gap: 10px; }
 }
 </style>
