@@ -1,20 +1,35 @@
 <template>
   <div class="recipe-detail" v-if="recipe">
     <div class="header">
-      <button @click="$router.back()" class="btn btn-secondary">← 返回</button>
-      <div class="actions">
-        <button @click="toggleFavorite" :class="['btn', recipe.is_favorited ? 'btn-cancel' : 'btn-primary']">
-          {{ recipe.is_favorited ? '♥ 已收藏' : '♡ 收藏' }}
+      <div class="header-left">
+        <button @click="$router.back()" class="btn-back" aria-label="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
         </button>
-        <button @click="openAddMenu" class="btn btn-secondary">📅 加入菜单</button>
+        <h1 class="header-title">{{ recipe.title }}</h1>
+      </div>
+      <div class="actions">
+        <button
+          @click="toggleFavorite"
+          class="btn-fav"
+          :class="{ favorited: recipe.is_favorited }"
+          aria-label="收藏"
+        >
+          <svg viewBox="0 0 24 24" class="heart-icon">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+        </button>
         <button v-if="recipe.status === 'draft'" @click="publishRecipe" class="btn btn-primary">发布</button>
-        <button @click="goEdit" class="btn btn-secondary">✏️ 编辑</button>
-        <button @click="deleteRecipe" class="btn btn-danger">🗑 删除</button>
+        <button @click="goEdit" class="btn btn-secondary btn-sm">✏️ 编辑</button>
       </div>
     </div>
 
+    <!-- 加入菜单悬浮按钮 -->
+    <button @click="openAddMenu" class="btn-fab">加入菜单</button>
+
     <div class="recipe-content">
-      <h1>{{ recipe.title }}</h1>
       <p class="summary">{{ recipe.summary }}</p>
 
       <div class="meta">
@@ -22,27 +37,29 @@
         <span v-if="recipe.prep_minutes">⏱️ 准备 {{ recipe.prep_minutes }}分钟</span>
         <span v-if="recipe.cook_minutes">🔥 烹饪 {{ recipe.cook_minutes }}分钟</span>
         <span v-if="recipe.difficulty">📊 {{ recipe.difficulty }}</span>
-        <span :class="['status-badge', recipe.status]">{{ recipe.status }}</span>
       </div>
 
       <div class="tags" v-if="recipe.tags.length > 0">
         <span v-for="tag in recipe.tags" :key="tag.id" class="tag">{{ tag.name }}</span>
       </div>
 
-      <div class="categories" v-if="recipe.categories.length > 0">
-        <span v-for="cat in recipe.categories" :key="cat.id" class="tag category-tag">📁 {{ cat.name }}</span>
+      <div class="categories">
+        <span :class="['status-badge', recipe.status]">{{ recipe.status }}</span>
+        <template v-if="recipe.categories.length > 0">
+          <span v-for="cat in recipe.categories" :key="cat.id" class="tag category-tag">📁 {{ cat.name }}</span>
+        </template>
       </div>
 
       <section class="section">
         <h2>🥬 食材清单</h2>
-        <ul class="ingredient-list">
-          <li v-for="ing in recipe.ingredients" :key="ing.id">
-            <span class="ingredient-name">{{ ing.ingredient_name }}</span>
-            <span class="ingredient-quantity">{{ ing.quantity }} {{ ing.unit }}</span>
-            <span v-if="ing.preparation" class="ingredient-prep">({{ ing.preparation }})</span>
-            <span v-if="ing.optional" class="optional-badge">可选</span>
-          </li>
-        </ul>
+        <div class="ingredient-list">
+          <span v-for="ing in recipe.ingredients" :key="ing.id" class="ingredient-chip">
+            {{ ing.ingredient_name }}
+            <em v-if="ing.quantity">{{ ing.quantity }} {{ ing.unit }}</em>
+            <em v-if="ing.preparation" class="prep">({{ ing.preparation }})</em>
+            <em v-if="ing.optional" class="optional">可选</em>
+          </span>
+        </div>
       </section>
 
       <section class="section" v-if="recipe.seasonings.length > 0">
@@ -169,18 +186,6 @@ function goEdit() {
   router.push(`/recipes/${recipe.value.id}/edit`);
 }
 
-async function deleteRecipe() {
-  if (!recipe.value) return;
-  if (!window.confirm('确定删除该菜谱？将移入回收站，可恢复。')) return;
-  try {
-    await recipeApi.delete(recipe.value.id);
-    toast('已移入回收站');
-    router.push('/recipes');
-  } catch (error) {
-    console.error('Failed to delete recipe:', error);
-  }
-}
-
 async function calculateCoverage() {
   if (!recipe.value || !coverageInput.value) return;
   try {
@@ -204,23 +209,119 @@ onMounted(() => {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
+  padding-bottom: 100px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .actions {
   display: flex;
   gap: 10px;
+  flex-shrink: 0;
 }
 
-.recipe-content h1 {
-  margin: 0 0 10px 0;
-  color: #333;
+/* 返回按钮：向左箭头，蓝色轮廓，透明背景，圆角矩形外形 */
+.btn-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-back:hover {
+  background: rgba(7, 132, 255, 0.08);
+}
+
+/* 收藏按钮：心形图案，已收藏为红色，未收藏为透明(空心) */
+.btn-fav {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.heart-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.heart-icon path {
+  fill: transparent;
+  stroke: #999;
+  stroke-width: 1.8;
+  transition: fill 0.2s, stroke 0.2s;
+}
+
+.btn-fav.favorited .heart-icon path {
+  fill: #e53935;
+  stroke: #e53935;
+}
+
+/* 加入菜单悬浮按钮：腰圆孔形状 */
+.btn-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 80px;
+  z-index: 100;
+  min-height: 48px;
+  padding: 14px 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.btn-fab:hover {
+  background: #357abd;
+  transform: translateY(-1px);
+}
+
+.recipe-content {
+  margin-top: 4px;
 }
 
 .summary {
@@ -311,41 +412,36 @@ onMounted(() => {
 }
 
 .ingredient-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.ingredient-list li {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: #f9f9f9;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.ingredient-name {
-  font-weight: 500;
+.ingredient-chip {
+  background: #e8f0f7;
   color: #333;
-}
-
-.ingredient-quantity {
-  color: #666;
-}
-
-.ingredient-prep {
-  color: #888;
+  padding: 6px 12px;
+  border-radius: 16px;
   font-size: 13px;
 }
 
-.optional-badge {
+.ingredient-chip em {
+  font-style: normal;
+  color: #5a7d9c;
+  margin-left: 2px;
+}
+
+.ingredient-chip em.prep {
+  color: #888;
+}
+
+.ingredient-chip em.optional {
   background: #e3f2fd;
   color: #1976d2;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 10px;
   font-size: 11px;
+  margin-left: 4px;
 }
 
 .step-list {
@@ -496,46 +592,32 @@ onMounted(() => {
   background: #d0d0d0;
 }
 
-.btn-cancel {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.btn-danger {
-  background: #f44336;
-  color: white;
-}
-
-.btn-danger:hover {
-  background: #d32f2f;
+/* 小尺寸按钮：减小内边距 */
+.btn-sm {
+  padding: 4px 12px;
+  min-height: 32px;
+  font-size: 13px;
 }
 
 /* 移动端响应式样式 */
 @media (max-width: 767px) {
   .recipe-detail {
     padding: 16px;
+    padding-bottom: 104px;
   }
 
   .header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  .header .btn {
-    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
   }
 
   .actions {
-    justify-content: stretch;
+    margin-left: auto;
   }
 
-  .actions .btn {
-    flex: 1;
-  }
-
-  .recipe-content h1 {
-    font-size: 1.5rem;
+  .header-title {
+    font-size: 1.1rem;
   }
 
   .summary {
@@ -565,20 +647,6 @@ onMounted(() => {
   .section h2 {
     font-size: 1.1rem;
     margin-bottom: 12px;
-  }
-
-  .ingredient-list li {
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .ingredient-name {
-    font-size: 0.95rem;
-  }
-
-  .ingredient-quantity {
-    font-size: 0.9rem;
   }
 
   .step-content {
