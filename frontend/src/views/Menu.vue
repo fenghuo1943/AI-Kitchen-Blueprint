@@ -73,17 +73,20 @@
         </div>
       </div>
       <div v-if="!waterfall.length" class="empty-state">还没有安排菜单，去菜谱库「加入菜单」吧</div>
-      <div class="pagination" v-if="totalPage > 1">
-        <button @click="waterPage--; loadWaterfall()" :disabled="waterPage === 1">上一页</button>
-        <span>{{ waterPage }} / {{ totalPage }}</span>
-        <button @click="waterPage++; loadWaterfall()" :disabled="waterPage >= totalPage">下一页</button>
+      <div v-if="waterfall.length" class="load-more">
+        <span v-if="loadingMore" class="loading">加载中...</span>
+        <span v-else-if="loadError" class="error">
+          加载失败
+          <button class="btn btn-secondary btn-small" @click="loadWaterfall(false)">重试</button>
+        </span>
+        <span v-else-if="!hasMore" class="end">—— 到底了 ——</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { menuApi, getHouseholdId } from '../services/api';
 import { toast } from '../composables/useToast';
@@ -102,7 +105,12 @@ const selectedDate = ref('');
 const waterfall = ref<any[]>([]);
 const waterPage = ref(1);
 const totalPage = ref(1);
-const pageSize = 10;
+const pageSize = 15;
+const loadingMore = ref(false);
+const loadError = ref(false);
+
+// 是否还有下一页可加载（waterPage 指向待加载的页码）
+const hasMore = computed(() => waterPage.value <= totalPage.value);
 
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -178,20 +186,60 @@ async function removeFromDay(recipeId: string) {
 
 async function switchWaterfall() {
   mode.value = 'waterfall';
-  waterPage.value = 1;
-  await loadWaterfall();
+  window.scrollTo(0, 0);
+  await loadWaterfall(true);
 }
 
-async function loadWaterfall() {
+// 加载瀑布流：reset=true 时从第一页重新加载，否则追加下一页
+async function loadWaterfall(reset = false) {
+  if (loadingMore.value) return;
   const householdId = getHouseholdId();
   if (!householdId) return;
+  if (!reset && !hasMore.value) return;
+  loadingMore.value = true;
+  loadError.value = false;
+  if (reset) {
+    waterPage.value = 1;
+    totalPage.value = 1;
+    waterfall.value = [];
+  }
   try {
     const res = await menuApi.getWaterfall(householdId, { page: waterPage.value, page_size: pageSize });
-    waterfall.value = res.list;
     totalPage.value = res.total_page;
+    if (reset) {
+      waterfall.value = [...res.list];
+    } else {
+      // 追加并按日期去重，避免数据变动导致重复分组
+      const seen = new Set(waterfall.value.map(g => g.date));
+      waterfall.value.push(...res.list.filter((g: any) => !seen.has(g.date)));
+    }
+    if (res.list.length === 0 || waterPage.value >= totalPage.value) {
+      waterPage.value = totalPage.value + 1; // 已到底
+    } else {
+      waterPage.value++;
+    }
   } catch (e) {
     console.error('waterfall failed', e);
+    loadError.value = true;
+  } finally {
+    loadingMore.value = false;
+    fillViewportIfNeeded();
   }
+}
+
+// 滚动接近底部时触发加载下一页
+function onScroll() {
+  if (mode.value !== 'waterfall') return;
+  if (loadingMore.value || !hasMore.value) return;
+  const scrollBottom = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+  if (scrollBottom < 100) loadWaterfall(false);
+}
+
+// 首屏内容不足一屏时自动补载，保证滚动触发可用
+function fillViewportIfNeeded() {
+  if (loadingMore.value || loadError.value || !hasMore.value || mode.value !== 'waterfall') return;
+  const remaining = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+  if (remaining <= 200) loadWaterfall(false);
 }
 
 function goDetail(id: string) {
@@ -204,8 +252,13 @@ onMounted(() => {
     toast('请先创建/选择家庭（库存管理页）', 'error');
     return;
   }
+  window.addEventListener('scroll', onScroll, { passive: true });
   loadMonth();
   selectDay(fmt(today));
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll);
 });
 </script>
 
@@ -268,8 +321,10 @@ onMounted(() => {
   display: flex; justify-content: space-between; align-items: center;
 }
 
-.pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; }
-.pagination button { min-height: 44px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; }
+.load-more { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 20px; color: #999; font-size: 13px; }
+.load-more .loading { color: #4a90d9; }
+.load-more .error { color: #f44336; }
+.load-more .end { color: #bbb; }
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-secondary { background: #f0f0f0; color: #333; }
