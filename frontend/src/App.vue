@@ -248,7 +248,7 @@ body {
   }
 
   .main-content {
-    padding: 16px;
+    padding: 16px 0; /* 各视图自带水平内边距，这里只保留上下间距，避免两侧空白过大 */
     padding-bottom: 76px; /* 为底部 tabbar 留空间 */
   }
 
