@@ -348,6 +348,7 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
+  min-height: 44px;
 }
 
 .household-btn:hover {
@@ -477,11 +478,16 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-small {
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-size: 12px;
+  min-height: 36px;
 }
 
 .btn-primary {
@@ -522,13 +528,14 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 16px;
 }
 
 .modal {
   background: white;
   border-radius: 12px;
   padding: 30px;
-  width: 90%;
+  width: 100%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
@@ -554,11 +561,12 @@ watch(() => appStore.currentHouseholdId, (newId) => {
 .form-group textarea,
 .form-group select {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 16px;
   box-sizing: border-box;
+  min-height: 44px;
 }
 
 .form-row {
@@ -575,5 +583,124 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .inventory {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+    margin: 0;
+    text-align: center;
+  }
+
+  .header .btn {
+    width: 100%;
+  }
+
+  .household-selector {
+    padding: 24px 16px;
+  }
+
+  .household-list {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .household-btn {
+    width: 100%;
+  }
+
+  .expiring-list {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .expiring-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .item-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .item-details {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .item-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .item-actions .btn {
+    flex: 1;
+    min-width: calc(50% - 4px);
+  }
+
+  .pagination {
+    gap: 12px;
+  }
+
+  .pagination button {
+    min-height: 44px;
+    padding: 8px 16px;
+  }
+
+  /* 移动端模态框 */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    border-radius: 12px 12px 0 0;
+    max-height: 95vh;
+    padding: 24px 16px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* 平板端响应式样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .household-list {
+    gap: 8px;
+  }
+
+  .household-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
 }
 </style>

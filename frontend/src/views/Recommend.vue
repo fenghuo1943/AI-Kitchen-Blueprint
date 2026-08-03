@@ -244,9 +244,10 @@ h1 {
 
 .ingredient-input input {
   flex: 1;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
+  min-height: 44px;
 }
 
 .selected-ingredients {
@@ -297,11 +298,12 @@ h1 {
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 16px;
   box-sizing: border-box;
+  min-height: 44px;
 }
 
 .checkbox-group {
@@ -317,6 +319,8 @@ h1 {
   font-size: 14px;
   color: #555;
   cursor: pointer;
+  min-height: 44px;
+  padding: 8px 0;
 }
 
 .btn {
@@ -326,6 +330,10 @@ h1 {
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-primary {
@@ -467,5 +475,109 @@ h1 {
 .fallback-reason {
   font-size: 14px;
   color: #666;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .recommend {
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+  }
+
+  .recommend-form {
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .form-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+  }
+
+  .form-section h2 {
+    font-size: 1rem;
+  }
+
+  .ingredient-input {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ingredient-input input {
+    width: 100%;
+  }
+
+  .ingredient-input .btn {
+    width: 100%;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .checkbox-group {
+    gap: 8px;
+  }
+
+  .checkbox-label {
+    min-height: 40px;
+    padding: 6px 0;
+  }
+
+  .btn-large {
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  .result-card {
+    padding: 16px;
+  }
+
+  .result-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .result-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .result-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .result-ingredients h4 {
+    font-size: 12px;
+  }
+
+  .empty-state {
+    padding: 40px 16px;
+  }
+
+  .empty-state p {
+    font-size: 1rem;
+  }
+}
+
+/* 平板端响应式样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .recommend-form {
+    padding: 20px;
+  }
+
+  .form-row {
+    gap: 12px;
+  }
 }
 </style>

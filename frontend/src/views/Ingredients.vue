@@ -374,11 +374,16 @@ onMounted(() => {
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-small {
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-size: 12px;
+  min-height: 36px;
 }
 
 .btn-primary {
@@ -419,13 +424,14 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 16px;
 }
 
 .modal {
   background: white;
   border-radius: 12px;
   padding: 30px;
-  width: 90%;
+  width: 100%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
@@ -451,11 +457,12 @@ onMounted(() => {
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 16px;
   box-sizing: border-box;
+  min-height: 44px;
 }
 
 .modal-actions {
@@ -463,5 +470,105 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .ingredients {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+    margin: 0;
+    text-align: center;
+  }
+
+  .header .btn {
+    width: 100%;
+  }
+
+  .filters {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filters input,
+  .filters select {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .ingredient-card {
+    padding: 16px;
+  }
+
+  .ingredient-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ingredient-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .ingredient-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ingredient-actions .btn {
+    flex: 1;
+    min-width: calc(50% - 4px);
+  }
+
+  .pagination {
+    gap: 12px;
+  }
+
+  .pagination button {
+    min-height: 44px;
+    padding: 8px 16px;
+  }
+
+  /* 移动端模态框 */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    border-radius: 12px 12px 0 0;
+    max-height: 95vh;
+    padding: 24px 16px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* 平板端响应式样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ingredient-actions {
+    gap: 6px;
+  }
+
+  .ingredient-actions .btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
 }
 </style>

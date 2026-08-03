@@ -292,9 +292,10 @@ onMounted(() => {
 
 .coverage-input input {
   flex: 1;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
+  min-height: 44px;
 }
 
 .coverage-result {
@@ -365,6 +366,10 @@ onMounted(() => {
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-primary {
@@ -388,5 +393,132 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background: #d0d0d0;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .recipe-detail {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .header .btn {
+    width: 100%;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .actions .btn {
+    flex: 1;
+  }
+
+  .recipe-content h1 {
+    font-size: 1.5rem;
+  }
+
+  .summary {
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+
+  .meta {
+    gap: 12px;
+    font-size: 13px;
+  }
+
+  .tags {
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+
+  .tag {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .section {
+    margin-bottom: 24px;
+  }
+
+  .section h2 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+  }
+
+  .ingredient-list li {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .ingredient-name {
+    font-size: 0.95rem;
+  }
+
+  .ingredient-quantity {
+    font-size: 0.9rem;
+  }
+
+  .step-content {
+    padding: 12px;
+  }
+
+  .step-content p {
+    font-size: 0.95rem;
+  }
+
+  .coverage-section {
+    padding: 16px;
+    margin-top: 24px;
+  }
+
+  .coverage-input {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .coverage-input input {
+    width: 100%;
+  }
+
+  .coverage-input .btn {
+    width: 100%;
+  }
+
+  .score-value {
+    font-size: 2rem;
+  }
+
+  .matched,
+  .missing {
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+
+  .loading {
+    padding: 40px 16px;
+  }
+}
+
+/* 平板端响应式样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .recipe-detail {
+    padding: 16px;
+  }
+
+  .meta {
+    gap: 12px;
+  }
+
+  .section h2 {
+    font-size: 1.2rem;
+  }
 }
 </style>

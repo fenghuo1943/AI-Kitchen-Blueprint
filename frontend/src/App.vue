@@ -2,13 +2,35 @@
   <div class="app">
     <nav class="navbar">
       <router-link to="/" class="nav-brand">🍳 AI 厨房助手</router-link>
-      <div class="nav-links">
-        <router-link to="/recipes">菜谱库</router-link>
-        <router-link to="/inventory">库存管理</router-link>
-        <router-link to="/recommend">智能推荐</router-link>
-        <router-link to="/ingredients">食材管理</router-link>
+
+      <!-- 移动端汉堡菜单按钮 -->
+      <button
+        v-if="isMobile"
+        class="menu-toggle"
+        @click="toggleMobileMenu"
+        :class="{ active: isMobileMenuOpen }"
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <!-- 桌面端导航链接 -->
+      <div class="nav-links" :class="{ 'mobile-open': isMobileMenuOpen }" v-if="!isMobile || isMobileMenuOpen">
+        <router-link to="/recipes" @click="closeMobileMenu">菜谱库</router-link>
+        <router-link to="/inventory" @click="closeMobileMenu">库存管理</router-link>
+        <router-link to="/recommend" @click="closeMobileMenu">智能推荐</router-link>
+        <router-link to="/ingredients" @click="closeMobileMenu">食材管理</router-link>
       </div>
     </nav>
+
+    <!-- 移动端菜单遮罩 -->
+    <div
+      v-if="isMobile && isMobileMenuOpen"
+      class="mobile-overlay"
+      @click="closeMobileMenu"
+    ></div>
+
     <main class="main-content">
       <router-view />
     </main>
@@ -16,10 +38,29 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useAppStore } from './stores/app';
+import { useResponsive } from './composables/useResponsive';
 
 const appStore = useAppStore();
+const { isMobile } = useResponsive();
+
+const isMobileMenuOpen = ref(false);
+
+function toggleMobileMenu() {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value;
+}
+
+function closeMobileMenu() {
+  isMobileMenuOpen.value = false;
+}
+
+// 监听窗口大小变化，关闭移动端菜单
+watch(isMobile, (newVal) => {
+  if (!newVal) {
+    isMobileMenuOpen.value = false;
+  }
+});
 
 onMounted(() => {
   appStore.init();
@@ -63,6 +104,41 @@ body {
   text-decoration: none;
 }
 
+/* 移动端汉堡菜单按钮 */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 30px;
+  height: 21px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 200;
+}
+
+.menu-toggle span {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: #333;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.menu-toggle.active span:nth-child(1) {
+  transform: translateY(9px) rotate(45deg);
+}
+
+.menu-toggle.active span:nth-child(2) {
+  opacity: 0;
+}
+
+.menu-toggle.active span:nth-child(3) {
+  transform: translateY(-9px) rotate(-45deg);
+}
+
 .nav-links {
   display: flex;
   gap: 24px;
@@ -73,6 +149,7 @@ body {
   text-decoration: none;
   font-size: 14px;
   transition: color 0.2s;
+  padding: 8px 0;
 }
 
 .nav-links a:hover {
@@ -84,9 +161,80 @@ body {
   font-weight: 500;
 }
 
+/* 移动端菜单遮罩 */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+}
+
 .main-content {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* 响应式样式 */
+@media (max-width: 767px) {
+  .navbar {
+    padding: 12px 16px;
+  }
+
+  .nav-brand {
+    font-size: 1.1rem;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  .nav-links {
+    position: fixed;
+    top: 0;
+    right: -280px;
+    width: 280px;
+    height: 100vh;
+    background: white;
+    flex-direction: column;
+    padding: 80px 24px 24px;
+    gap: 0;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    z-index: 160;
+  }
+
+  .nav-links.mobile-open {
+    right: 0;
+  }
+
+  .nav-links a {
+    padding: 16px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 16px;
+  }
+
+  .mobile-overlay {
+    display: block;
+  }
+
+  .main-content {
+    padding: 16px;
+  }
+}
+
+/* 平板端样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .nav-links {
+    gap: 16px;
+  }
+
+  .nav-links a {
+    font-size: 13px;
+  }
 }
 </style>

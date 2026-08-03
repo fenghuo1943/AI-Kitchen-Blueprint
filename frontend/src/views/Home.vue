@@ -90,4 +90,56 @@ h1 {
   color: #666;
   font-size: 0.9rem;
 }
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .home {
+    padding: 24px 16px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+
+  .features {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .feature-card {
+    padding: 20px 12px;
+  }
+
+  .feature-icon {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+  }
+
+  .feature-card h3 {
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 0.8rem;
+  }
+}
+
+/* 平板端响应式样式 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .features {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .feature-card {
+    padding: 24px 16px;
+  }
+}
 </style>

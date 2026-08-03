@@ -10,3 +10,48 @@
 
 单元测试覆盖规则、解析、权限和错误分支；集成测试覆盖 API、数据库、任务与向量库适配；端到端测试覆盖库存到推荐、草稿到发布两个主流程。缺陷修复先补回归测试（无法测试时在 PR/变更说明中解释）。
 
+## 前端响应式编码规范
+
+### CSS 规范
+
+1. **使用移动优先（Mobile First）写法**：
+   ```css
+   /* 基础样式为移动端 */
+   .component {
+     padding: 16px;
+   }
+   
+   /* 平板端及以上 */
+   @media (min-width: 768px) {
+     .component {
+       padding: 20px;
+     }
+   }
+   ```
+
+2. **避免固定宽度**：使用百分比、`max-width` 或 CSS Grid/Flexbox
+
+3. **触摸友好**：
+   - 按钮最小高度：44px
+   - 输入框最小高度：44px
+   - 输入框字体大小：16px（防止 iOS 缩放）
+
+### JavaScript/TypeScript 规范
+
+1. **使用 `useResponsive` 工具**：
+   ```typescript
+   import { useResponsive } from '../composables/useResponsive';
+   
+   const { isMobile, isTablet, isDesktop } = useResponsive();
+   ```
+
+2. **条件渲染**：根据设备类型渲染不同组件或布局
+
+3. **事件处理**：移动端避免 hover 效果，使用点击事件
+
+### 测试规范
+
+1. 在 375px、768px、1024px 宽度下测试
+2. 验证触摸目标尺寸
+3. 检查表单输入不会触发 iOS 缩放
+
