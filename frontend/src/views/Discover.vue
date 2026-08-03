@@ -1,13 +1,23 @@
 <template>
   <div class="discover">
-    <div class="header">
-      <button class="btn btn-secondary" @click="loadAll">刷新</button>
+    <!-- 榜单 Tab 切换 -->
+    <div class="tabs" role="tablist">
+      <button
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="tab"
+        :class="{ active: activeTab === tab.key }"
+        role="tab"
+        :aria-selected="activeTab === tab.key"
+        @click="switchTab(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
     </div>
 
     <!-- 今日推荐 -->
-    <section class="section">
+    <section v-if="activeTab === 'today'" class="section">
       <div class="section-head">
-        <h2>🔥 今日推荐</h2>
         <span class="section-hint">当天稳定，每天更新</span>
       </div>
       <div v-if="today.length" class="card-grid">
@@ -25,9 +35,8 @@
     </section>
 
     <!-- 随机推荐 -->
-    <section class="section">
+    <section v-if="activeTab === 'random'" class="section">
       <div class="section-head">
-        <h2>🎲 随机推荐</h2>
         <button class="btn btn-secondary btn-small" @click="loadRandom">换一批</button>
       </div>
       <div v-if="randomRecipes.length" class="card-grid">
@@ -41,13 +50,11 @@
           @menu="openAddMenu"
         />
       </div>
+      <div v-else class="empty-hint">暂无推荐</div>
     </section>
 
     <!-- 热门 -->
-    <section class="section">
-      <div class="section-head">
-        <h2>🏆 热门</h2>
-      </div>
+    <section v-if="activeTab === 'hot'" class="section">
       <div v-if="hot.length" class="card-grid">
         <RecipeCard
           v-for="recipe in hot"
@@ -62,11 +69,8 @@
       <div v-else class="empty-hint">暂无热门菜谱</div>
     </section>
 
-    <!-- 最近添加 -->
-    <section class="section">
-      <div class="section-head">
-        <h2>🆕 最近添加</h2>
-      </div>
+    <!-- 最近更新 -->
+    <section v-if="activeTab === 'latest'" class="section">
       <div v-if="latest.length" class="card-grid">
         <RecipeCard
           v-for="recipe in latest"
@@ -78,6 +82,7 @@
           @menu="openAddMenu"
         />
       </div>
+      <div v-else class="empty-hint">暂无更新</div>
     </section>
 
     <AddToMenuModal ref="menuModal" :recipe-id="activeMenuRecipeId" />
@@ -99,6 +104,20 @@ const latest = ref<DiscoverRecipe[]>([]);
 
 const menuModal = ref();
 const activeMenuRecipeId = ref('');
+
+const tabs = [
+  { key: 'today', label: '今日推荐' },
+  { key: 'random', label: '随机推荐' },
+  { key: 'hot', label: '热门' },
+  { key: 'latest', label: '最近更新' }
+];
+const activeTab = ref('today');
+
+function switchTab(key: string) {
+  activeTab.value = key;
+  // 切到随机榜单时自动换一批，保证每次看到的随机菜谱不同
+  if (key === 'random') loadRandom();
+}
 
 async function loadAll() {
   const householdId = getHouseholdId();
@@ -160,11 +179,24 @@ onMounted(loadAll);
 
 <style scoped>
 .discover { padding: 20px; }
-.header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 16px; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #eee; }
+.tab {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.tab:hover { color: #333; }
+.tab.active { color: #4a90d9; border-bottom-color: #4a90d9; font-weight: 600; }
 
 .section { margin-bottom: 28px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.section-head h2 { margin: 0; font-size: 1.15rem; }
 .section-hint { font-size: 12px; color: #999; }
 
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
