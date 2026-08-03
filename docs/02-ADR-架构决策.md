@@ -1,0 +1,1 @@
+ADR001: FastAPI；ADR002: Vue3；ADR003: SQLite+PostgreSQL；ADR004: ChromaDB；ADR005: Ollama默认+API增强；ADR006: RAG优先于LLM生成。
