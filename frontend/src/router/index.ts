@@ -17,10 +17,64 @@ const router = createRouter({
       meta: { title: '菜谱库' }
     },
     {
+      path: '/recipes/new',
+      name: 'recipe-new',
+      component: () => import('../views/RecipeForm.vue'),
+      meta: { title: '新建菜谱' }
+    },
+    {
       path: '/recipes/:id',
       name: 'recipe-detail',
       component: () => import('../views/RecipeDetail.vue'),
       meta: { title: '菜谱详情' }
+    },
+    {
+      path: '/recipes/:id/edit',
+      name: 'recipe-edit',
+      component: () => import('../views/RecipeForm.vue'),
+      meta: { title: '编辑菜谱' }
+    },
+    {
+      path: '/menu',
+      name: 'menu',
+      component: () => import('../views/Menu.vue'),
+      meta: { title: '菜单' }
+    },
+    {
+      path: '/discover',
+      name: 'discover',
+      component: () => import('../views/Discover.vue'),
+      meta: { title: '发现' }
+    },
+    {
+      path: '/favorites',
+      name: 'favorites',
+      component: () => import('../views/Favorites.vue'),
+      meta: { title: '我的收藏' }
+    },
+    {
+      path: '/history',
+      name: 'history',
+      component: () => import('../views/History.vue'),
+      meta: { title: '浏览历史' }
+    },
+    {
+      path: '/recycle-bin',
+      name: 'recycle-bin',
+      component: () => import('../views/RecycleBin.vue'),
+      meta: { title: '回收站' }
+    },
+    {
+      path: '/categories',
+      name: 'categories',
+      component: () => import('../views/Categories.vue'),
+      meta: { title: '分类管理' }
+    },
+    {
+      path: '/seasonings',
+      name: 'seasonings',
+      component: () => import('../views/Seasonings.vue'),
+      meta: { title: '调料管理' }
     },
     {
       path: '/inventory',
@@ -39,6 +93,12 @@ const router = createRouter({
       name: 'ingredients',
       component: () => import('../views/Ingredients.vue'),
       meta: { title: '食材管理' }
+    },
+    {
+      path: '/me',
+      name: 'me',
+      component: () => import('../views/Me.vue'),
+      meta: { title: '我的' }
     }
   ]
 });

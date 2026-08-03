@@ -4,6 +4,7 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 
+from app.core.pinyin import to_pinyin
 from app.db.models import Ingredient, IngredientAlias
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.ingredient import (
@@ -30,6 +31,7 @@ class IngredientService:
         ingredients, total = self.repository.search(
             query=request.query,
             category=request.category,
+            category_id=request.category_id,
             allergens_exclude=request.allergens_exclude,
             season_month=request.season_month,
             page=page,
@@ -53,7 +55,9 @@ class IngredientService:
         ingredient = Ingredient(
             id=str(uuid.uuid4()),
             canonical_name=data.canonical_name,
+            pinyin=to_pinyin(data.canonical_name),
             category=data.category,
+            category_id=data.category_id,
             season_months=json.dumps(data.season_months) if data.season_months else None,
             allergens=json.dumps(data.allergens) if data.allergens else None,
             nutrition_ref=data.nutrition_ref,
@@ -88,6 +92,10 @@ class IngredientService:
             update_data["season_months"] = json.dumps(update_data["season_months"])
         if "allergens" in update_data and update_data["allergens"] is not None:
             update_data["allergens"] = json.dumps(update_data["allergens"])
+
+        # 名称变更时重算拼音
+        if "canonical_name" in update_data and update_data["canonical_name"]:
+            update_data["pinyin"] = to_pinyin(update_data["canonical_name"])
 
         for key, value in update_data.items():
             setattr(ingredient, key, value)
@@ -145,7 +153,10 @@ class IngredientService:
         return IngredientResponse(
             id=ingredient.id,
             canonical_name=ingredient.canonical_name,
+            pinyin=ingredient.pinyin,
             category=ingredient.category,
+            category_id=ingredient.category_id,
+            category_name=self._category_name(ingredient.category_id),
             season_months=season_months,
             allergens=allergens,
             nutrition_ref=ingredient.nutrition_ref,
@@ -157,3 +168,7 @@ class IngredientService:
             created_at=ingredient.created_at,
             updated_at=ingredient.updated_at
         )
+
+    def _category_name(self, category_id: Optional[str]) -> Optional[str]:
+        """查询食材分类名称"""
+        return self.repository.get_category_name(category_id)

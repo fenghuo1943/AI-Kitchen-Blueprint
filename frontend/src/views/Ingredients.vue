@@ -14,7 +14,7 @@
       />
       <select v-model="categoryFilter" @change="loadIngredients">
         <option value="">全部分类</option>
-        <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+        <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
       </select>
     </div>
 
@@ -22,9 +22,13 @@
       <div v-for="ing in ingredients" :key="ing.id" class="ingredient-card">
         <div class="ingredient-header">
           <h3>{{ ing.canonical_name }}</h3>
-          <span class="category-badge">{{ ing.category || '未分类' }}</span>
+          <span class="category-badge">{{ ing.category_name || ing.category || '未分类' }}</span>
         </div>
         <div class="ingredient-details">
+          <div class="detail-item" v-if="ing.pinyin">
+            <span class="label">拼音:</span>
+            <span>{{ ing.pinyin }}</span>
+          </div>
           <div v-if="ing.season_months && ing.season_months.length > 0" class="detail-item">
             <span class="label">应季月份:</span>
             <span>{{ ing.season_months.join(', ') }}月</span>
@@ -68,15 +72,9 @@
           </div>
           <div class="form-group">
             <label>分类</label>
-            <select v-model="ingredientForm.category">
+            <select v-model="ingredientForm.category_id">
               <option value="">请选择</option>
-              <option value="蔬菜">蔬菜</option>
-              <option value="肉类">肉类</option>
-              <option value="蛋类">蛋类</option>
-              <option value="主食">主食</option>
-              <option value="豆制品">豆制品</option>
-              <option value="水产">水产</option>
-              <option value="调料">调料</option>
+              <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
             </select>
           </div>
           <div class="form-group">
@@ -116,8 +114,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { ingredientApi } from '../services/api';
-import type { Ingredient } from '../types';
+import { ingredientApi, categoryApi } from '../services/api';
+import { toast } from '../composables/useToast';
+import type { Ingredient, Category } from '../types';
 
 const ingredients = ref<Ingredient[]>([]);
 const total = ref(0);
@@ -134,11 +133,11 @@ const aliasName = ref('');
 const seasonInput = ref('');
 const allergenInput = ref('');
 
-const categories = ['蔬菜', '肉类', '蛋类', '主食', '豆制品', '水产', '调料'];
+const categories = ref<Category[]>([]);
 
 const ingredientForm = ref({
   canonical_name: '',
-  category: ''
+  category_id: ''
 });
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize));
@@ -157,7 +156,7 @@ async function loadIngredients() {
   try {
     const response = await ingredientApi.list({
       query: searchQuery.value || undefined,
-      category: categoryFilter.value || undefined,
+      category_id: categoryFilter.value || undefined,
       page: page.value,
       page_size: pageSize
     });
@@ -168,11 +167,20 @@ async function loadIngredients() {
   }
 }
 
+async function loadCategories() {
+  try {
+    const res = await categoryApi.list('ingredient');
+    categories.value = res.data;
+  } catch (error) {
+    console.error('Failed to load categories:', error);
+  }
+}
+
 function editIngredient(ing: Ingredient) {
   editingIngredient.value = ing;
   ingredientForm.value = {
     canonical_name: ing.canonical_name,
-    category: ing.category || ''
+    category_id: ing.category_id || ''
   };
   seasonInput.value = ing.season_months ? ing.season_months.join(',') : '';
   allergenInput.value = ing.allergens ? ing.allergens.join(',') : '';
@@ -197,14 +205,14 @@ async function saveIngredient() {
     if (editingIngredient.value) {
       await ingredientApi.update(editingIngredient.value.id, {
         canonical_name: ingredientForm.value.canonical_name,
-        category: ingredientForm.value.category || undefined,
+        category_id: ingredientForm.value.category_id || undefined,
         season_months,
         allergens
       });
     } else {
       await ingredientApi.create({
         canonical_name: ingredientForm.value.canonical_name,
-        category: ingredientForm.value.category || undefined
+        category_id: ingredientForm.value.category_id || undefined
       });
     }
     closeCreateModal();
@@ -217,12 +225,12 @@ async function saveIngredient() {
 async function addAlias() {
   if (!aliasIngredient.value || !aliasName.value) return;
   try {
-    // This would need a dedicated API endpoint
-    console.log('Add alias:', aliasIngredient.value.id, aliasName.value);
+    await ingredientApi.addAlias(aliasIngredient.value.id, aliasName.value);
+    toast('别名已添加');
     showAliasModal.value = false;
     loadIngredients();
-  } catch (error) {
-    console.error('Failed to add alias:', error);
+  } catch (error: any) {
+    toast(error?.response?.data?.detail || '添加别名失败', 'error');
   }
 }
 
@@ -241,7 +249,7 @@ function closeCreateModal() {
   editingIngredient.value = null;
   ingredientForm.value = {
     canonical_name: '',
-    category: ''
+    category_id: ''
   };
   seasonInput.value = '';
   allergenInput.value = '';
@@ -263,6 +271,7 @@ function nextPage() {
 
 onMounted(() => {
   loadIngredients();
+  loadCategories();
 });
 </script>
 

@@ -1,10 +1,14 @@
 """菜谱数据访问层"""
+from datetime import date
+from collections import defaultdict
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, and_, case, func, select, distinct, literal
 
 from app.db.models import (
-    Recipe, RecipeIngredient, RecipeStep, RecipeTag, Tag
+    Recipe, Ingredient, RecipeIngredient, RecipeStep, RecipeTag, Tag,
+    RecipeCategory, RecipeCategoryLink, RecipeSeasoning, Seasoning,
+    Favorite, RecipeHistory, MealPlan,
 )
 
 
@@ -28,46 +32,241 @@ class RecipeRepository:
         difficulty: Optional[str] = None,
         tags: Optional[List[str]] = None,
         max_cook_time: Optional[int] = None,
+        ingredient_ids: Optional[List[str]] = None,
+        match_mode: str = "any",
+        category_id: Optional[str] = None,
+        household_id: Optional[str] = None,
+        sort: str = "score",
+        order: str = "desc",
+        deleted: bool = False,
         page: int = 1,
         page_size: int = 20
     ) -> Tuple[List[Recipe], int]:
-        """搜索菜谱"""
-        stmt = self.db.query(Recipe).filter(Recipe.deleted_at.is_(None))
+        """搜索菜谱（支持食材/分类/关键词/拼音/排序/回收站，参考 cook RecipeSearchRepository）
 
-        # 关键词搜索
+        返回的 Recipe 对象附带瞬态属性：
+        _score / _total_score / _is_favorited / _cooked_count / _is_in_today_menu / _category_ids
+        """
+        # ---- 过滤条件 ----
+        conditions = [
+            Recipe.deleted_at.isnot(None) if deleted else Recipe.deleted_at.is_(None)
+        ]
+
+        # 关键词：title / summary / 拼音前缀 / 分类名 / 食材名
         if query:
-            search_filter = or_(
-                Recipe.title.contains(query),
-                Recipe.summary.contains(query)
-            )
-            stmt = stmt.filter(search_filter)
+            keyword = query.strip()
+            if keyword:
+                conditions.append(or_(
+                    Recipe.title.like(f"%{keyword}%"),
+                    Recipe.summary.like(f"%{keyword}%"),
+                    Recipe.pinyin.like(f"{keyword}%"),
+                    self._category_name_match(keyword),
+                    self._ingredient_name_match(keyword),
+                ))
 
-        # 状态筛选
         if status:
-            stmt = stmt.filter(Recipe.status == status)
-
-        # 难度筛选
+            conditions.append(Recipe.status == status)
         if difficulty:
-            stmt = stmt.filter(Recipe.difficulty == difficulty)
-
-        # 最大烹饪时间
+            conditions.append(Recipe.difficulty == difficulty)
         if max_cook_time is not None:
-            stmt = stmt.filter(
-                (Recipe.cook_minutes + Recipe.prep_minutes) <= max_cook_time
+            conditions.append(
+                (func.ifnull(Recipe.cook_minutes, 0) + func.ifnull(Recipe.prep_minutes, 0)) <= max_cook_time
             )
-
-        # 标签筛选
+        # 标签
         if tags:
-            stmt = stmt.join(RecipeTag).join(Tag).filter(Tag.name.in_(tags))
+            conditions.append(Recipe.id.in_(
+                select(RecipeTag.recipe_id).where(
+                    and_(RecipeTag.tag_id == Tag.id, Tag.name.in_(tags))
+                )
+            ))
+        # 食材：exact=同时包含全部，any=包含任一
+        if ingredient_ids:
+            ing_count_sub = select(func.count(distinct(RecipeIngredient.ingredient_id))).where(
+                and_(
+                    RecipeIngredient.recipe_id == Recipe.id,
+                    RecipeIngredient.ingredient_id.in_(ingredient_ids),
+                )
+            ).scalar_subquery()
+            if match_mode == "exact":
+                conditions.append(ing_count_sub == len(ingredient_ids))
+            else:
+                conditions.append(ing_count_sub > 0)
+        # 菜谱分类
+        if category_id:
+            conditions.append(Recipe.id.in_(
+                select(RecipeCategoryLink.recipe_id).where(
+                    RecipeCategoryLink.category_id == category_id
+                )
+            ))
 
-        # 统计总数
-        total = stmt.count()
+        base = and_(*conditions)
 
-        # 分页
+        # ---- 计数 ----
+        total = self.db.query(func.count(Recipe.id)).filter(base).scalar()
+
+        # ---- 关键词评分（title×6 + 分类×2 + 食材×2 + summary×2 + 拼音前缀×1）----
+        score_expr: object = literal(0)
+        if query:
+            keyword = query.strip()
+            if keyword:
+                score_expr = (
+                    case((Recipe.title.like(f"%{keyword}%"), 6), else_=0)
+                    + case((self._category_name_match(keyword), 2), else_=0)
+                    + case((self._ingredient_name_match(keyword), 2), else_=0)
+                    + case((Recipe.summary.like(f"%{keyword}%"), 2), else_=0)
+                    + case((Recipe.pinyin.like(f"{keyword}%"), 1), else_=0)
+                )
+
+        # ---- 用户相关子查询（收藏/做过次数/今日菜单）----
+        cooked_count_sub = None
+        is_fav_sub = None
+        today_menu_sub = None
+        if household_id:
+            cooked_count_sub = select(func.count(MealPlan.id)).where(
+                and_(MealPlan.recipe_id == Recipe.id, MealPlan.household_id == household_id)
+            ).scalar_subquery()
+            is_fav_sub = select(func.count(Favorite.id)).where(
+                and_(Favorite.recipe_id == Recipe.id, Favorite.household_id == household_id)
+            ).scalar_subquery()
+            today_menu_sub = select(func.count(MealPlan.id)).where(
+                and_(
+                    MealPlan.recipe_id == Recipe.id,
+                    MealPlan.household_id == household_id,
+                    MealPlan.target_date == date.today().isoformat(),
+                )
+            ).scalar_subquery()
+
+        # total_score = score + cooked_count×0.5 + 收藏×2
+        total_score_expr = score_expr
+        if cooked_count_sub is not None:
+            total_score_expr = total_score_expr + (cooked_count_sub * 0.5) + (is_fav_sub * 2)
+
+        # total_score 是否真实表达式（有关键词或家庭偏好加分），否则是常量 literal(0)
+        has_real_score = bool(query and query.strip()) or (cooked_count_sub is not None)
+
+        # ---- 查询列表 ----
+        stmt = self.db.query(Recipe, total_score_expr.label("total_score")).filter(base)
+
+        order = order.lower()
+        if sort == "date":
+            stmt = stmt.order_by(Recipe.created_at.desc())
+        elif sort == "title":
+            stmt = stmt.order_by(Recipe.pinyin.asc(), Recipe.created_at.desc())
+        elif sort == "cook" and cooked_count_sub is not None:
+            stmt = stmt.order_by(cooked_count_sub.desc(), Recipe.created_at.desc())
+        elif sort == "random":
+            stmt = stmt.order_by(self._random_expr())
+        else:  # score / 默认（综合评分）
+            if has_real_score:
+                expr = total_score_expr.asc() if order == "asc" else total_score_expr.desc()
+                stmt = stmt.order_by(expr, Recipe.created_at.desc())
+            else:
+                # 无关键词且无家庭偏好数据：total_score 是常量，直接按创建时间排序
+                stmt = stmt.order_by(Recipe.created_at.desc())
+
         offset = (page - 1) * page_size
-        recipes = stmt.offset(offset).limit(page_size).all()
+        rows = stmt.offset(offset).limit(page_size).all()
+
+        # ---- 结果装配（瞬态属性）----
+        recipes: List[Recipe] = []
+        for recipe, total_score in rows:
+            recipe._total_score = float(total_score or 0)
+            recipe._score = float(recipe._total_score)
+            recipe._is_favorited = False
+            recipe._cooked_count = 0
+            recipe._is_in_today_menu = False
+            recipes.append(recipe)
+
+        if recipes and household_id:
+            recipe_ids = [r.id for r in recipes]
+            # 收藏
+            fav_ids = set()
+            for fav_id, in self.db.query(Favorite.recipe_id).filter(
+                and_(Favorite.household_id == household_id, Favorite.recipe_id.in_(recipe_ids))
+            ).all():
+                fav_ids.add(fav_id)
+            # 做过次数
+            cooked_map = defaultdict(int)
+            for rid, cnt in self.db.query(MealPlan.recipe_id, func.count(MealPlan.id)).filter(
+                and_(MealPlan.household_id == household_id, MealPlan.recipe_id.in_(recipe_ids))
+            ).group_by(MealPlan.recipe_id).all():
+                cooked_map[rid] = cnt
+            # 今日菜单
+            today_ids = set()
+            for rid, in self.db.query(MealPlan.recipe_id).filter(
+                and_(
+                    MealPlan.household_id == household_id,
+                    MealPlan.recipe_id.in_(recipe_ids),
+                    MealPlan.target_date == date.today().isoformat(),
+                )
+            ).all():
+                today_ids.add(rid)
+            for recipe in recipes:
+                recipe._is_favorited = recipe.id in fav_ids
+                recipe._cooked_count = cooked_map.get(recipe.id, 0)
+                recipe._is_in_today_menu = recipe.id in today_ids
+
+        # 分类ID
+        if recipes:
+            cat_map = defaultdict(list)
+            for rid, cid in self.db.query(RecipeCategoryLink.recipe_id, RecipeCategoryLink.category_id).filter(
+                RecipeCategoryLink.recipe_id.in_([r.id for r in recipes])
+            ).all():
+                cat_map[rid].append(cid)
+            for recipe in recipes:
+                recipe._category_ids = cat_map.get(recipe.id, [])
 
         return recipes, total
+
+    @staticmethod
+    def _category_name_match(keyword: str):
+        """关键词命中菜谱分类名的 EXISTS 表达式"""
+        return select(RecipeCategoryLink.id).where(
+            and_(
+                RecipeCategoryLink.recipe_id == Recipe.id,
+                RecipeCategory.id == RecipeCategoryLink.category_id,
+                RecipeCategory.name.like(f"%{keyword}%"),
+            )
+        ).exists()
+
+    @staticmethod
+    def _ingredient_name_match(keyword: str):
+        """关键词命中菜谱所含食材名的 EXISTS 表达式"""
+        return select(RecipeIngredient.id).where(
+            and_(
+                RecipeIngredient.recipe_id == Recipe.id,
+                Ingredient.id == RecipeIngredient.ingredient_id,
+                Ingredient.canonical_name.like(f"%{keyword}%"),
+            )
+        ).exists()
+
+    def _random_expr(self):
+        """随机排序表达式（兼容 SQLite/MySQL）"""
+        dialect = self.db.get_bind().dialect.name
+        return func.random() if dialect == "sqlite" else func.rand()
+
+    def get_by_id_any(self, recipe_id: str) -> Optional[Recipe]:
+        """根据ID获取菜谱（不区分软删状态，回收站详情用）"""
+        return self.db.query(Recipe).filter(Recipe.id == recipe_id).first()
+
+    def restore(self, recipe_id: str) -> Optional[Recipe]:
+        """恢复软删除的菜谱"""
+        recipe = self.get_by_id_any(recipe_id)
+        if not recipe:
+            return None
+        recipe.deleted_at = None
+        self.db.commit()
+        self.db.refresh(recipe)
+        return recipe
+
+    def hard_delete(self, recipe_id: str) -> bool:
+        """彻底删除菜谱（级联清理关联数据）"""
+        recipe = self.get_by_id_any(recipe_id)
+        if not recipe:
+            return False
+        self.db.delete(recipe)
+        self.db.commit()
+        return True
 
     def create(self, recipe: Recipe) -> Recipe:
         """创建菜谱"""
@@ -159,6 +358,115 @@ class RecipeRepository:
         return self.db.query(Tag).join(RecipeTag).filter(
             RecipeTag.recipe_id == recipe_id
         ).all()
+
+    # ---- 菜谱分类关联 ----
+    def remove_categories(self, recipe_id: str) -> None:
+        """删除菜谱的所有分类关联"""
+        self.db.query(RecipeCategoryLink).filter(
+            RecipeCategoryLink.recipe_id == recipe_id
+        ).delete()
+        self.db.commit()
+
+    def add_category(self, recipe_id: str, category_id: str) -> None:
+        """添加菜谱分类关联"""
+        link = RecipeCategoryLink(
+            recipe_id=recipe_id,
+            category_id=category_id,
+        )
+        self.db.add(link)
+        self.db.commit()
+
+    def get_categories(self, recipe_id: str) -> List[RecipeCategory]:
+        """获取菜谱的分类"""
+        return self.db.query(RecipeCategory).join(RecipeCategoryLink).filter(
+            RecipeCategoryLink.recipe_id == recipe_id
+        ).all()
+
+    def get_category_ids(self, recipe_id: str) -> List[str]:
+        """获取菜谱分类ID列表"""
+        return [row[0] for row in self.db.query(RecipeCategoryLink.category_id).filter(
+            RecipeCategoryLink.recipe_id == recipe_id
+        ).all()]
+
+    # ---- 菜谱调料关联 ----
+    def remove_seasonings(self, recipe_id: str) -> None:
+        """删除菜谱的所有调料关联"""
+        self.db.query(RecipeSeasoning).filter(
+            RecipeSeasoning.recipe_id == recipe_id
+        ).delete()
+        self.db.commit()
+
+    def add_seasoning(self, recipe_id: str, seasoning_id: str, quantity: Optional[str] = None) -> None:
+        """添加菜谱调料关联"""
+        link = RecipeSeasoning(
+            recipe_id=recipe_id,
+            seasoning_id=seasoning_id,
+            quantity=quantity,
+        )
+        self.db.add(link)
+        self.db.commit()
+
+    def get_seasonings(self, recipe_id: str) -> List[RecipeSeasoning]:
+        """获取菜谱的调料（含调料名）"""
+        return self.db.query(RecipeSeasoning).filter(
+            RecipeSeasoning.recipe_id == recipe_id
+        ).all()
+
+    def get_seasonings_detail(self, recipe_id: str) -> List[dict]:
+        """获取菜谱调料详情（含调料名称）"""
+        rows = self.db.query(RecipeSeasoning, Seasoning).join(
+            Seasoning, Seasoning.id == RecipeSeasoning.seasoning_id
+        ).filter(RecipeSeasoning.recipe_id == recipe_id).all()
+        return [
+            {
+                "id": rs.id,
+                "seasoning_id": rs.seasoning_id,
+                "seasoning_name": s.canonical_name,
+                "quantity": rs.quantity,
+            }
+            for rs, s in rows
+        ]
+
+    # ---- 用户相关查询（供详情/列表使用）----
+    def is_favorited(self, household_id: str, recipe_id: str) -> bool:
+        """是否已收藏"""
+        return self.db.query(Favorite.id).filter(
+            and_(Favorite.household_id == household_id, Favorite.recipe_id == recipe_id)
+        ).first() is not None
+
+    def cooked_count(self, household_id: str, recipe_id: str) -> int:
+        """该家庭把此菜谱加入过几天菜单"""
+        return self.db.query(func.count(MealPlan.id)).filter(
+            and_(MealPlan.household_id == household_id, MealPlan.recipe_id == recipe_id)
+        ).scalar() or 0
+
+    def is_in_today_menu(self, household_id: str, recipe_id: str) -> bool:
+        """今天是否在菜单中"""
+        return self.db.query(MealPlan.id).filter(
+            and_(
+                MealPlan.household_id == household_id,
+                MealPlan.recipe_id == recipe_id,
+                MealPlan.target_date == date.today().isoformat(),
+            )
+        ).first() is not None
+
+    def record_history(self, household_id: str, recipe_id: str) -> None:
+        """记录浏览历史（upsert：每家庭每菜谱一条，重复浏览刷新时间）"""
+        from datetime import datetime
+        history = self.db.query(RecipeHistory).filter(
+            and_(RecipeHistory.household_id == household_id, RecipeHistory.recipe_id == recipe_id)
+        ).first()
+        if history:
+            history.viewed_at = datetime.utcnow()
+            history.updated_at = datetime.utcnow()
+        else:
+            history = RecipeHistory(
+                household_id=household_id,
+                recipe_id=recipe_id,
+                viewed_at=datetime.utcnow(),
+            )
+            self.db.add(history)
+        self.db.commit()
 
     def publish_recipe(self, recipe_id: str) -> Optional[Recipe]:
         """发布菜谱"""

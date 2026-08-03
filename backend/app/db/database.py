@@ -19,24 +19,26 @@ def get_engine():
     if _engine is None:
         from app.core.config import settings
 
-        # 获取数据库 URL（添加连接超时参数）
+        # 获取数据库 URL（添加连接超时参数，仅 MySQL/MariaDB）
         DATABASE_URL = settings.database_url
-        if "?" in DATABASE_URL:
-            DATABASE_URL += "&connect_timeout=10"
-        else:
-            DATABASE_URL += "?connect_timeout=10"
-        logger.info(f"数据库连接: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
-
-        # 创建数据库引擎
-        _engine = create_engine(
-            DATABASE_URL,
+        is_sqlite = DATABASE_URL.startswith("sqlite")
+        engine_kwargs = dict(
             pool_size=5,
             max_overflow=10,
             pool_pre_ping=True,
             pool_recycle=3600,
-            connect_args={"connect_timeout": 10},
-            echo=settings.APP_DEBUG
+            echo=settings.APP_DEBUG,
         )
+        if not is_sqlite:
+            if "?" in DATABASE_URL:
+                DATABASE_URL += "&connect_timeout=10"
+            else:
+                DATABASE_URL += "?connect_timeout=10"
+            engine_kwargs["connect_args"] = {"connect_timeout": 10}
+        logger.info(f"数据库连接: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
+
+        # 创建数据库引擎
+        _engine = create_engine(DATABASE_URL, **engine_kwargs)
     return _engine
 
 

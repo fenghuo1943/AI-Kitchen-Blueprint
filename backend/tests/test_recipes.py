@@ -67,6 +67,21 @@ class TestRecipesAPI:
         data = response.json()
         assert len(data["data"]) > 0
 
+    def test_list_recipes_sort_score_no_keyword(self, client: TestClient, sample_recipe):
+        """回归测试：无关键词 + sort=score 不应报错（MySQL 中常量 literal 不能用于 ORDER BY）"""
+        response = client.get("/api/v1/recipes", params={"sort": "score", "order": "desc"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert "total" in data
+
+    def test_list_recipes_sort_score_no_keyword_asc(self, client: TestClient, sample_recipe):
+        """回归测试：无关键词 + sort=score 升序同样不应报错"""
+        response = client.get("/api/v1/recipes", params={"sort": "score", "order": "asc"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+
     def test_update_recipe(self, client: TestClient, sample_recipe):
         """测试更新菜谱"""
         response = client.patch(

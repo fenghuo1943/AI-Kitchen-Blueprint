@@ -3,10 +3,10 @@ import uuid
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import (
-    Column, String, Text, Integer, DateTime, ForeignKey,
-    UniqueConstraint, Index
+    Column, String, Text, Integer, DateTime, Date, ForeignKey,
+    UniqueConstraint, Index, text
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.db.database import Base
 
 
@@ -15,9 +15,13 @@ def generate_uuid() -> str:
 
 
 class TimestampMixin:
-    """时间戳混入类"""
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    """时间戳混入类
+
+    server_default 保证即使通过原生 SQL 插入（未显式提供时间戳），
+    也能取到数据库默认值，而不会产生零值日期（'0000-00-00 00:00:00'）。
+    """
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP"), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=text("CURRENT_TIMESTAMP"), nullable=False)
     deleted_at = Column(DateTime, nullable=True)
 
 
@@ -40,6 +44,8 @@ class Ingredient(Base, TimestampMixin):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     canonical_name = Column(String(100), nullable=False, unique=True)
     category = Column(String(50), nullable=True)
+    category_id = Column(String(36), ForeignKey("ingredient_categories.id"), nullable=True)
+    pinyin = Column(String(255), nullable=True)
     season_months = Column(String(200), nullable=True)  # JSON 格式: ["1","2","3"]
     allergens = Column(String(200), nullable=True)  # JSON 格式: ["gluten","dairy"]
     nutrition_ref = Column(String(500), nullable=True)
@@ -49,6 +55,7 @@ class Ingredient(Base, TimestampMixin):
     aliases = relationship("IngredientAlias", back_populates="ingredient", cascade="all, delete-orphan")
     recipe_ingredients = relationship("RecipeIngredient", back_populates="ingredient")
     inventory_items = relationship("InventoryItem", back_populates="ingredient")
+    category_obj = relationship("IngredientCategory", back_populates="ingredients")
 
 
 class IngredientAlias(Base, TimestampMixin):
@@ -102,7 +109,9 @@ class Recipe(Base, TimestampMixin):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     title = Column(String(200), nullable=False)
+    pinyin = Column(String(255), nullable=True)
     summary = Column(String(1000), nullable=True)
+    cover = Column(String(500), nullable=True)
     servings = Column(Integer, nullable=True)
     prep_minutes = Column(Integer, nullable=True)
     cook_minutes = Column(Integer, nullable=True)
@@ -118,6 +127,8 @@ class Recipe(Base, TimestampMixin):
     recipe_ingredients = relationship("RecipeIngredient", back_populates="recipe", cascade="all, delete-orphan")
     recipe_steps = relationship("RecipeStep", back_populates="recipe", cascade="all, delete-orphan")
     recipe_tags = relationship("RecipeTag", back_populates="recipe", cascade="all, delete-orphan")
+    recipe_seasonings = relationship("RecipeSeasoning", back_populates="recipe", cascade="all, delete-orphan")
+    recipe_category_links = relationship("RecipeCategoryLink", back_populates="recipe", cascade="all, delete-orphan")
     document_chunks = relationship("DocumentChunk", back_populates="recipe", cascade="all, delete-orphan")
 
     __table_args__ = (
@@ -294,3 +305,156 @@ class AuditEvent(Base):
     actor = Column(String(100), nullable=True)
     details_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+# ============================================================
+# 分类 / 调料 / 收藏 / 历史 / 菜单（参考 cook 项目移植）
+# ============================================================
+
+class RecipeCategory(Base, TimestampMixin):
+    """菜谱分类"""
+    __tablename__ = "recipe_categories"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(100), nullable=False, unique=True)
+    parent_id = Column(String(36), ForeignKey("recipe_categories.id", ondelete="SET NULL"), nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+
+    # 自引用层级（本期按平铺单层使用，parent_id 预留）
+    parent = relationship("RecipeCategory", remote_side=[id], backref=backref("children"))
+
+    # 关系
+    recipe_links = relationship("RecipeCategoryLink", back_populates="category", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_recipe_categories_sort", "sort_order"),
+    )
+
+
+class IngredientCategory(Base, TimestampMixin):
+    """食材分类"""
+    __tablename__ = "ingredient_categories"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(100), nullable=False, unique=True)
+
+    # 关系
+    ingredients = relationship("Ingredient", back_populates="category_obj")
+
+
+class SeasoningCategory(Base, TimestampMixin):
+    """调料分类"""
+    __tablename__ = "seasoning_categories"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(100), nullable=False, unique=True)
+
+    # 关系
+    seasonings = relationship("Seasoning", back_populates="category_obj")
+
+
+class Seasoning(Base, TimestampMixin):
+    """调料"""
+    __tablename__ = "seasonings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    canonical_name = Column(String(100), nullable=False, unique=True)
+    pinyin = Column(String(255), nullable=True)
+    category_id = Column(String(36), ForeignKey("seasoning_categories.id"), nullable=True)
+
+    # 关系
+    category_obj = relationship("SeasoningCategory", back_populates="seasonings")
+    recipe_seasonings = relationship("RecipeSeasoning", back_populates="seasoning")
+
+
+class RecipeSeasoning(Base, TimestampMixin):
+    """菜谱调料关联"""
+    __tablename__ = "recipe_seasonings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    seasoning_id = Column(String(36), ForeignKey("seasonings.id"), nullable=False)
+    quantity = Column(String(50), nullable=True)
+
+    # 关系
+    recipe = relationship("Recipe", back_populates="recipe_seasonings")
+    seasoning = relationship("Seasoning", back_populates="recipe_seasonings")
+
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "seasoning_id", name="uq_recipe_seasoning"),
+        Index("idx_recipe_seasonings_seasoning", "seasoning_id"),
+    )
+
+
+class RecipeCategoryLink(Base, TimestampMixin):
+    """菜谱分类关联"""
+    __tablename__ = "recipe_category_links"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    category_id = Column(String(36), ForeignKey("recipe_categories.id"), nullable=False)
+
+    # 关系
+    recipe = relationship("Recipe", back_populates="recipe_category_links")
+    category = relationship("RecipeCategory", back_populates="recipe_links")
+
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "category_id", name="uq_recipe_category"),
+        Index("idx_recipe_category_links_category", "category_id"),
+    )
+
+
+class Favorite(Base, TimestampMixin):
+    """收藏"""
+    __tablename__ = "favorites"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    household_id = Column(String(36), ForeignKey("households.id", ondelete="CASCADE"), nullable=False)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+
+    # 关系
+    household = relationship("Household")
+    recipe = relationship("Recipe")
+
+    __table_args__ = (
+        UniqueConstraint("household_id", "recipe_id", name="uq_favorite_household_recipe"),
+        Index("idx_favorites_household_created", "household_id", "created_at"),
+    )
+
+
+class RecipeHistory(Base, TimestampMixin):
+    """浏览历史（每家庭每菜谱一条，重复浏览刷新 viewed_at）"""
+    __tablename__ = "recipe_history"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    household_id = Column(String(36), ForeignKey("households.id", ondelete="CASCADE"), nullable=False)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    viewed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 关系
+    household = relationship("Household")
+    recipe = relationship("Recipe")
+
+    __table_args__ = (
+        UniqueConstraint("household_id", "recipe_id", name="uq_history_household_recipe"),
+        Index("idx_history_household_viewed", "household_id", "viewed_at"),
+    )
+
+
+class MealPlan(Base, TimestampMixin):
+    """每日菜单（某天安排哪些菜谱）"""
+    __tablename__ = "meal_plans"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    household_id = Column(String(36), ForeignKey("households.id", ondelete="CASCADE"), nullable=False)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    target_date = Column(Date, nullable=False)
+
+    # 关系
+    household = relationship("Household")
+    recipe = relationship("Recipe")
+
+    __table_args__ = (
+        UniqueConstraint("household_id", "recipe_id", "target_date", name="uq_meal_plan"),
+        Index("idx_meal_plan_household_date", "household_id", "target_date"),
+    )

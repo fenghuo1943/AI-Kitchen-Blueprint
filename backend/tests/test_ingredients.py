@@ -114,3 +114,42 @@ class TestIngredientsAPI:
             params={"alias_name": "重复别名"}
         )
         assert response.status_code == 409
+
+    def test_create_ingredient_generates_pinyin(self, client: TestClient):
+        """测试创建食材自动生成拼音"""
+        response = client.post(
+            "/api/v1/ingredients",
+            json={"canonical_name": "胡萝卜"}
+        )
+        assert response.status_code == 201
+        assert response.json()["pinyin"] == "huluobo"
+
+    def test_search_ingredient_by_pinyin(self, client: TestClient):
+        """测试按拼音前缀搜索食材"""
+        client.post("/api/v1/ingredients", json={"canonical_name": "胡萝卜"})
+        response = client.get("/api/v1/ingredients", params={"query": "hulu"})
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+
+    def test_create_ingredient_with_category_id(self, client: TestClient):
+        """测试创建带分类ID的食材"""
+        cat = client.post("/api/v1/categories?type=ingredient", json={"name": "蔬菜"}).json()
+        response = client.post(
+            "/api/v1/ingredients",
+            json={"canonical_name": "菠菜", "category_id": cat["id"]}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["category_id"] == cat["id"]
+        assert data["category_name"] == "蔬菜"
+
+    def test_filter_ingredient_by_category_id(self, client: TestClient):
+        """测试按分类ID筛选食材"""
+        cat = client.post("/api/v1/categories?type=ingredient", json={"name": "蔬菜"}).json()
+        client.post("/api/v1/ingredients", json={"canonical_name": "菠菜", "category_id": cat["id"]})
+        client.post("/api/v1/ingredients", json={"canonical_name": "鸡蛋"})
+
+        response = client.get("/api/v1/ingredients", params={"category_id": cat["id"]})
+        data = response.json()
+        assert data["total"] == 1
+        assert data["data"][0]["canonical_name"] == "菠菜"

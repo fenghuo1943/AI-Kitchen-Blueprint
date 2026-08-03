@@ -1,142 +1,217 @@
 <template>
   <div class="recipes">
     <div class="header">
-      <h1>📚 菜谱库</h1>
-      <button @click="showCreateModal = true" class="btn btn-primary">添加菜谱</button>
+      <h1>🍳 菜谱库</h1>
+      <button @click="goCreate" class="btn btn-primary">＋ 添加菜谱</button>
     </div>
 
-    <div class="filters">
+    <!-- 顶部搜索 -->
+    <div class="top-bar">
       <input
-        v-model="searchQuery"
+        v-model="searchInput"
         type="text"
-        placeholder="搜索菜谱..."
+        placeholder="搜索菜谱 / 拼音 / 食材..."
+        class="search-input"
         @input="debouncedSearch"
       />
-      <select v-model="statusFilter" @change="loadRecipes">
-        <option value="">全部状态</option>
-        <option value="draft">草稿</option>
-        <option value="published">已发布</option>
-        <option value="archived">已归档</option>
-      </select>
+      <button @click="clearFilters" class="btn btn-secondary">清除筛选</button>
     </div>
 
-    <div class="recipe-list" v-if="recipes.length > 0">
-      <div v-for="recipe in recipes" :key="recipe.id" class="recipe-card" @click="viewRecipe(recipe.id)">
-        <div class="recipe-header">
-          <h3>{{ recipe.title }}</h3>
-          <span :class="['status-badge', recipe.status]">{{ recipe.status }}</span>
+    <!-- 筛选面板 -->
+    <div class="filters">
+      <div class="filter-row">
+        <button @click="openIngredientModal" class="btn btn-secondary">食材筛选</button>
+        <div class="match-mode-switch">
+          <div :class="['match-mode-option', match === 'exact' ? 'active' : '']" @click="setMatch('exact')">精确</div>
+          <div :class="['match-mode-option', match === 'any' ? 'active' : '']" @click="setMatch('any')">模糊</div>
         </div>
-        <p class="recipe-summary">{{ recipe.summary || '暂无简介' }}</p>
-        <div class="recipe-meta">
-          <span v-if="recipe.servings">👥 {{ recipe.servings }}人份</span>
-          <span v-if="recipe.total_minutes">⏱️ {{ (recipe.prep_minutes || 0) + (recipe.cook_minutes || 0) }}分钟</span>
-          <span v-if="recipe.difficulty">📊 {{ recipe.difficulty }}</span>
-        </div>
-        <div class="recipe-tags">
-          <span v-for="tag in recipe.tags.slice(0, 3)" :key="tag.id" class="tag">{{ tag.name }}</span>
-        </div>
+        <span v-if="selectedIngredients.length" class="filter-count">已选{{ selectedIngredients.length }}食材</span>
       </div>
+
+      <div class="filter-row">
+        <select v-model="sort" @change="loadRecipes" class="filter-select">
+          <option value="score">综合推荐</option>
+          <option value="date">最新添加</option>
+          <option value="cook">做过次数</option>
+          <option value="random">随机推荐</option>
+          <option value="title">名称排序</option>
+        </select>
+        <select v-model="categoryId" @change="loadRecipes" class="filter-select">
+          <option value="">全部分类</option>
+          <option v-for="c in recipeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <select v-model="status" @change="loadRecipes" class="filter-select">
+          <option value="">全部状态</option>
+          <option value="draft">草稿</option>
+          <option value="published">已发布</option>
+          <option value="archived">已归档</option>
+        </select>
+      </div>
+
+      <!-- 已选食材 chips -->
+      <div v-if="selectedIngredients.length" class="chosen-ingredients">
+        <span v-for="ing in selectedIngredients" :key="ing.id" class="chosen-chip">
+          {{ ing.name }}
+          <button class="chip-remove" @click="removeIngredient(ing.id)">×</button>
+        </span>
+      </div>
+
+      <span class="filter-count">共 {{ total }} 个菜谱</span>
     </div>
 
+    <!-- 菜谱列表 -->
+    <div class="recipe-grid" v-if="recipes.length > 0">
+      <RecipeCard
+        v-for="recipe in recipes"
+        :key="recipe.id"
+        :recipe="recipe"
+        @favorite="toggleFavorite"
+        @menu="openAddMenu"
+      />
+    </div>
     <div v-else class="empty-state">
       <p>📭 暂无菜谱</p>
-      <button @click="showCreateModal = true" class="btn btn-primary">添加第一个菜谱</button>
+      <button @click="goCreate" class="btn btn-primary">添加第一个菜谱</button>
     </div>
 
+    <!-- 分页 -->
     <div class="pagination" v-if="total > pageSize">
       <button @click="prevPage" :disabled="page === 1">上一页</button>
       <span>{{ page }} / {{ totalPages }}</span>
       <button @click="nextPage" :disabled="page === totalPages">下一页</button>
     </div>
 
-    <!-- 创建菜谱弹窗 -->
-    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+    <!-- 食材筛选弹窗 -->
+    <div v-if="showIngModal" class="modal-overlay" @click.self="showIngModal = false">
       <div class="modal">
-        <h2>添加新菜谱</h2>
-        <form @submit.prevent="createRecipe">
-          <div class="form-group">
-            <label>菜谱名称 *</label>
-            <input v-model="newRecipe.title" type="text" required />
-          </div>
-          <div class="form-group">
-            <label>简介</label>
-            <textarea v-model="newRecipe.summary"></textarea>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>份量</label>
-              <input v-model.number="newRecipe.servings" type="number" min="1" />
-            </div>
-            <div class="form-group">
-              <label>准备时间(分钟)</label>
-              <input v-model.number="newRecipe.prep_minutes" type="number" min="0" />
-            </div>
-            <div class="form-group">
-              <label>烹饪时间(分钟)</label>
-              <input v-model.number="newRecipe.cook_minutes" type="number" min="0" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>难度</label>
-            <select v-model="newRecipe.difficulty">
-              <option value="">请选择</option>
-              <option value="简单">简单</option>
-              <option value="中等">中等</option>
-              <option value="困难">困难</option>
-            </select>
-          </div>
-          <div class="modal-actions">
-            <button type="button" @click="showCreateModal = false" class="btn btn-secondary">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="!newRecipe.title">创建</button>
-          </div>
-        </form>
+        <h3>食材筛选</h3>
+        <input v-model="ingSearch" type="text" placeholder="搜索食材" class="modal-search" />
+        <select v-model="ingCategoryFilter" class="modal-select">
+          <option value="">全部分类</option>
+          <option v-for="c in ingCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <div class="ing-list">
+          <span
+            v-for="ing in filteredIngredients"
+            :key="ing.id"
+            :class="['item-modal', isSelected(ing.id) ? 'selected' : '']"
+            @click="toggleIngredient(ing)"
+          >
+            {{ ing.canonical_name }}
+          </span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showIngModal = false">完成</button>
+        </div>
       </div>
     </div>
+
+    <!-- 加入菜单弹窗 -->
+    <AddToMenuModal ref="menuModal" :recipe-id="activeMenuRecipeId" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { recipeApi } from '../services/api';
-import type { Recipe } from '../types';
+import { useRoute, useRouter } from 'vue-router';
+import RecipeCard from '../components/RecipeCard.vue';
+import AddToMenuModal from '../components/AddToMenuModal.vue';
+import { recipeApi, categoryApi, ingredientApi, favoriteApi, getHouseholdId } from '../services/api';
+import { toast } from '../composables/useToast';
+import type { Recipe, Category, Ingredient } from '../types';
 
 const router = useRouter();
+const route = useRoute();
 
 const recipes = ref<Recipe[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
-const searchQuery = ref('');
-const statusFilter = ref('');
-const showCreateModal = ref(false);
 
-const newRecipe = ref({
-  title: '',
-  summary: '',
-  servings: undefined as number | undefined,
-  prep_minutes: undefined as number | undefined,
-  cook_minutes: undefined as number | undefined,
-  difficulty: ''
+const searchInput = ref('');
+const status = ref('');
+const sort = ref('score');
+const match = ref<'exact' | 'any'>('exact');
+const categoryId = ref('');
+const selectedIngredients = ref<{ id: string; name: string }[]>([]);
+
+const recipeCategories = ref<Category[]>([]);
+const ingCategories = ref<Category[]>([]);
+const allIngredients = ref<Ingredient[]>([]);
+
+const showIngModal = ref(false);
+const ingSearch = ref('');
+const ingCategoryFilter = ref('');
+
+const menuModal = ref();
+const activeMenuRecipeId = ref('');
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+const filteredIngredients = computed(() => {
+  return allIngredients.value.filter(ing => {
+    if (ingCategoryFilter.value && ing.category_id !== ingCategoryFilter.value) return false;
+    if (ingSearch.value && !ing.canonical_name.includes(ingSearch.value)) return false;
+    return true;
+  });
 });
 
-const totalPages = computed(() => Math.ceil(total.value / pageSize));
-
 let searchTimeout: ReturnType<typeof setTimeout>;
-
 function debouncedSearch() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     page.value = 1;
     loadRecipes();
-  }, 300);
+  }, 400);
+}
+
+function setMatch(m: 'exact' | 'any') {
+  match.value = m;
+  loadRecipes();
+}
+
+function isSelected(id: string) {
+  return selectedIngredients.value.some(i => i.id === id);
+}
+
+function toggleIngredient(ing: Ingredient) {
+  const idx = selectedIngredients.value.findIndex(i => i.id === ing.id);
+  if (idx >= 0) selectedIngredients.value.splice(idx, 1);
+  else selectedIngredients.value.push({ id: ing.id, name: ing.canonical_name });
+  loadRecipes();
+}
+
+function removeIngredient(id: string) {
+  selectedIngredients.value = selectedIngredients.value.filter(i => i.id !== id);
+  loadRecipes();
+}
+
+function openIngredientModal() {
+  showIngModal.value = true;
+  ingSearch.value = '';
+  ingCategoryFilter.value = '';
+}
+
+function clearFilters() {
+  searchInput.value = '';
+  status.value = '';
+  sort.value = 'score';
+  match.value = 'exact';
+  categoryId.value = '';
+  selectedIngredients.value = [];
+  page.value = 1;
+  loadRecipes();
 }
 
 async function loadRecipes() {
   try {
     const response = await recipeApi.list({
-      query: searchQuery.value || undefined,
-      status: statusFilter.value || undefined,
+      query: searchInput.value || undefined,
+      status: status.value || undefined,
+      sort: sort.value,
+      category_id: categoryId.value || undefined,
+      ingredients: selectedIngredients.value.map(i => i.id).join(',') || undefined,
+      match: selectedIngredients.value.length ? match.value : undefined,
+      household_id: getHouseholdId(),
       page: page.value,
       page_size: pageSize
     });
@@ -147,376 +222,137 @@ async function loadRecipes() {
   }
 }
 
+async function toggleFavorite(recipe: Recipe | import('../types').DiscoverRecipe) {
+  const householdId = getHouseholdId();
+  if (!householdId) {
+    toast('请先创建/选择家庭（库存管理页）', 'error');
+    return;
+  }
+  try {
+    if (recipe.is_favorited) {
+      await favoriteApi.remove(recipe.id, householdId);
+      recipe.is_favorited = false;
+      toast('已取消收藏');
+    } else {
+      await favoriteApi.add(recipe.id, householdId);
+      recipe.is_favorited = true;
+      toast('已收藏');
+    }
+  } catch (e) {
+    console.error('favorite failed', e);
+  }
+}
+
+function openAddMenu(recipe: Recipe | import('../types').DiscoverRecipe) {
+  activeMenuRecipeId.value = recipe.id;
+  menuModal.value?.open();
+}
+
 function viewRecipe(id: string) {
   router.push(`/recipes/${id}`);
 }
 
+function goCreate() {
+  router.push('/recipes/new');
+}
+
 function prevPage() {
-  if (page.value > 1) {
-    page.value--;
-    loadRecipes();
-  }
+  if (page.value > 1) { page.value--; loadRecipes(); }
 }
-
 function nextPage() {
-  if (page.value < totalPages.value) {
-    page.value++;
-    loadRecipes();
-  }
+  if (page.value < totalPages.value) { page.value++; loadRecipes(); }
 }
 
-async function createRecipe() {
-  try {
-    await recipeApi.create(newRecipe.value);
-    showCreateModal.value = false;
-    newRecipe.value = {
-      title: '',
-      summary: '',
-      servings: undefined,
-      prep_minutes: undefined,
-      cook_minutes: undefined,
-      difficulty: ''
-    };
-    loadRecipes();
-  } catch (error) {
-    console.error('Failed to create recipe:', error);
+onMounted(async () => {
+  // 从首页搜索跳转时带上关键词
+  const q = route.query.q as string | undefined;
+  if (q) {
+    searchInput.value = q;
   }
-}
-
-onMounted(() => {
   loadRecipes();
+  try {
+    const [rc, ic, ings] = await Promise.all([
+      categoryApi.list('recipe'),
+      categoryApi.list('ingredient'),
+      ingredientApi.list({ page: 1, page_size: 100 })
+    ]);
+    recipeCategories.value = rc.data;
+    ingCategories.value = ic.data;
+    allIngredients.value = ings.data;
+  } catch (e) {
+    console.error('Failed to load filters:', e);
+  }
 });
 </script>
 
 <style scoped>
-.recipes {
-  padding: 20px;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
+.recipes { padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.top-bar { display: flex; gap: 10px; margin-bottom: 12px; }
+.search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; min-height: 44px; }
 
 .filters {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.filters input,
-.filters select {
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-.filters input {
-  flex: 1;
-}
-
-.recipe-list {
-  display: grid;
-  gap: 16px;
-}
-
-.recipe-card {
   background: white;
   border-radius: 12px;
-  padding: 20px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.recipe-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.recipe-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.recipe-header h3 {
-  margin: 0;
-  color: #333;
-}
-
-.status-badge {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.status-badge.draft {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-badge.published {
-  background: #d4edda;
-  color: #155724;
-}
-
-.status-badge.archived {
-  background: #e2e3e5;
-  color: #383d41;
-}
-
-.recipe-summary {
-  color: #666;
-  margin: 0 0 10px 0;
-  font-size: 14px;
-}
-
-.recipe-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #888;
-  margin-bottom: 10px;
-}
-
-.recipe-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  background: #f0f0f0;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #666;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #888;
-}
-
-.empty-state p {
-  font-size: 1.2rem;
-  margin-bottom: 20px;
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-primary {
-  background: #4a90d9;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #357abd;
-}
-
-.btn-secondary {
-  background: #e0e0e0;
-  color: #333;
-}
-
-.btn-secondary:hover {
-  background: #d0d0d0;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 16px;
-}
-
-.modal {
-  background: white;
-  border-radius: 12px;
-  padding: 30px;
-  width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal h2 {
-  margin: 0 0 20px 0;
-  color: #333;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 14px;
-  color: #555;
-}
-
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
   padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-  box-sizing: border-box;
-  min-height: 44px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
-.form-group textarea {
-  min-height: 100px;
-  resize: vertical;
-}
+.filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.filter-select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
 
-.form-row {
-  display: flex;
-  gap: 12px;
-}
+.match-mode-switch { display: flex; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+.match-mode-option { padding: 8px 16px; cursor: pointer; font-size: 13px; }
+.match-mode-option.active { background: #4a90d9; color: white; }
 
-.form-row .form-group {
-  flex: 1;
+.filter-count { font-size: 13px; color: #888; }
+.chosen-ingredients { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chosen-chip {
+  background: #e3f2fd; color: #1976d2; padding: 4px 10px; border-radius: 14px; font-size: 12px;
+  display: inline-flex; align-items: center; gap: 6px;
 }
+.chip-remove { border: none; background: none; color: #1976d2; cursor: pointer; font-size: 14px; padding: 0; }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+.recipe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: #888; }
+.empty-state p { font-size: 1.2rem; margin-bottom: 20px; }
+
+.pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; }
+.pagination button { min-height: 44px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; }
+.pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
+.btn-primary { background: #4a90d9; color: white; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+
+/* 食材弹窗 */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
 }
+.modal { background: white; border-radius: 12px; padding: 24px; width: 100%; max-width: 480px; max-height: 80vh; display: flex; flex-direction: column; }
+.modal h3 { margin: 0 0 12px 0; }
+.modal-search, .modal-select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 44px; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
+.ing-list { display: flex; flex-wrap: wrap; gap: 8px; overflow-y: auto; flex: 1; padding: 4px; }
+.item-modal {
+  padding: 8px 14px; border: 1px solid #ddd; border-radius: 16px; cursor: pointer; font-size: 14px;
+}
+.item-modal.selected { background: #4a90d9; color: white; border-color: #4a90d9; }
+.modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
 
-/* 移动端响应式样式 */
 @media (max-width: 767px) {
-  .recipes {
-    padding: 16px;
-  }
-
-  .header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  .header h1 {
-    font-size: 1.5rem;
-    margin: 0;
-    text-align: center;
-  }
-
-  .header .btn {
-    width: 100%;
-  }
-
-  .filters {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .filters input,
-  .filters select {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .recipe-card {
-    padding: 16px;
-  }
-
-  .recipe-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .recipe-header h3 {
-    font-size: 1.1rem;
-  }
-
-  .recipe-meta {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .pagination {
-    gap: 12px;
-  }
-
-  .pagination button {
-    min-height: 44px;
-    padding: 8px 16px;
-  }
-
-  /* 移动端模态框 */
-  .modal-overlay {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .modal {
-    border-radius: 12px 12px 0 0;
-    max-height: 95vh;
-    padding: 24px 16px;
-  }
-
-  .form-row {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .modal-actions {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .modal-actions .btn {
-    width: 100%;
-  }
-}
-
-/* 平板端响应式样式 */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .recipe-card {
-    padding: 16px;
-  }
-
-  .filters {
-    gap: 8px;
-  }
+  .recipes { padding: 16px; }
+  .header { flex-direction: column; gap: 12px; align-items: stretch; }
+  .header h1 { text-align: center; margin: 0; }
+  .header .btn { width: 100%; }
+  .top-bar { flex-direction: column; }
+  .top-bar .btn { width: 100%; }
+  .filter-row { gap: 8px; }
+  .filter-select { flex: 1; min-width: 0; }
+  .recipe-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: 12px 12px 0 0; max-height: 90vh; }
 }
 </style>

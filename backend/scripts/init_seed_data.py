@@ -10,15 +10,25 @@ import json
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
+from pypinyin import lazy_pinyin
 from app.db.database import get_session_local, init_db
 from app.db.models import (
     Household, Ingredient, IngredientAlias, Tag,
-    Recipe, RecipeSource, RecipeIngredient, RecipeStep, RecipeTag
+    Recipe, RecipeSource, RecipeIngredient, RecipeStep, RecipeTag,
+    IngredientCategory, SeasoningCategory, Seasoning, RecipeSeasoning,
+    RecipeCategory, RecipeCategoryLink
 )
 
 
 def generate_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def to_pinyin(text: str) -> str:
+    """生成无空格拼音（用于拼音搜索）"""
+    if not text:
+        return ""
+    return "".join(lazy_pinyin(text))
 
 
 def seed_data(db: Session):
@@ -32,7 +42,56 @@ def seed_data(db: Session):
     )
     db.add(household)
 
-    # 创建基础食材
+    # 创建默认分类（防止引用空分类）
+    default_ing_category = IngredientCategory(id="1", name="默认")
+    default_sea_category = SeasoningCategory(id="1", name="默认")
+    default_recipe_category = RecipeCategory(id="1", name="默认", sort_order=0)
+    db.add_all([default_ing_category, default_sea_category, default_recipe_category])
+
+    # 食材分类（name -> obj）
+    ing_categories = {}
+    for name in ["蔬菜", "肉类", "蛋类", "主食", "豆制品", "水产", "菌菇"]:
+        cat = IngredientCategory(id=generate_uuid(), name=name)
+        db.add(cat)
+        ing_categories[name] = cat
+
+    # 菜谱分类
+    recipe_categories = {}
+    for i, name in enumerate(["家常菜", "快手菜", "汤羹", "主食", "凉拌"], 1):
+        cat = RecipeCategory(id=generate_uuid(), name=name, sort_order=i)
+        db.add(cat)
+        recipe_categories[name] = cat
+
+    # 调料分类 + 基础调料
+    sea_categories = {}
+    for name in ["基础调料", "酱料", "香料"]:
+        cat = SeasoningCategory(id=generate_uuid(), name=name)
+        db.add(cat)
+        sea_categories[name] = cat
+
+    seasonings_data = [
+        {"canonical_name": "盐", "category": "基础调料"},
+        {"canonical_name": "糖", "category": "基础调料"},
+        {"canonical_name": "酱油", "category": "酱料"},
+        {"canonical_name": "料酒", "category": "酱料"},
+        {"canonical_name": "食用油", "category": "基础调料"},
+        {"canonical_name": "醋", "category": "酱料"},
+        {"canonical_name": "葱", "category": "香料"},
+        {"canonical_name": "姜", "category": "香料"},
+        {"canonical_name": "蒜", "category": "香料"},
+    ]
+    seasoning_objects = {}
+    for data in seasonings_data:
+        seasoning = Seasoning(
+            id=generate_uuid(),
+            canonical_name=data["canonical_name"],
+            pinyin=to_pinyin(data["canonical_name"]),
+            category_id=sea_categories[data["category"]].id,
+        )
+        db.add(seasoning)
+        seasoning_objects[data["canonical_name"]] = seasoning
+
+    # 创建基础食材（带分类与拼音）
     ingredients_data = [
         {"canonical_name": "鸡蛋", "category": "蛋类", "season_months": json.dumps(["1","2","3","4","5","6","7","8","9","10","11","12"]), "allergens": json.dumps(["eggs"])},
         {"canonical_name": "番茄", "category": "蔬菜", "season_months": json.dumps(["5","6","7","8","9"]), "allergens": json.dumps([])},
@@ -48,7 +107,13 @@ def seed_data(db: Session):
 
     ingredient_objects = {}
     for data in ingredients_data:
-        ingredient = Ingredient(id=generate_uuid(), **data)
+        cat_obj = ing_categories.get(data["category"])
+        ingredient = Ingredient(
+            id=generate_uuid(),
+            **data,
+            pinyin=to_pinyin(data["canonical_name"]),
+            category_id=cat_obj.id if cat_obj else None,
+        )
         db.add(ingredient)
         ingredient_objects[data["canonical_name"]] = ingredient
 
@@ -112,6 +177,8 @@ def seed_data(db: Session):
                 {"instruction": "倒入炒好的鸡蛋，加盐调味，翻炒均匀即可", "duration_minutes": 2},
             ],
             "tags": ["家常菜", "快炒", "简单", "15分钟"],
+            "categories": ["家常菜", "快手菜"],
+            "seasonings": [{"name": "盐", "quantity": "适量"}, {"name": "葱", "quantity": "适量"}],
         },
         {
             "title": "土豆烧肉",
@@ -135,6 +202,8 @@ def seed_data(db: Session):
                 {"instruction": "大火烧开后转小火炖煮25分钟至软烂", "duration_minutes": 25},
             ],
             "tags": ["家常菜", "炖煮", "冬季"],
+            "categories": ["家常菜"],
+            "seasonings": [{"name": "酱油", "quantity": "适量"}, {"name": "料酒", "quantity": "适量"}, {"name": "姜", "quantity": "适量"}],
         },
     ]
 
@@ -143,6 +212,7 @@ def seed_data(db: Session):
         recipe = Recipe(
             id=recipe_id,
             title=recipe_data["title"],
+            pinyin=to_pinyin(recipe_data["title"]),
             summary=recipe_data["summary"],
             servings=recipe_data["servings"],
             prep_minutes=recipe_data["prep_minutes"],
@@ -188,6 +258,27 @@ def seed_data(db: Session):
                     tag_id=tag.id
                 )
                 db.add(recipe_tag)
+
+        # 添加菜谱分类关联
+        for cat_name in recipe_data.get("categories", []):
+            cat = recipe_categories.get(cat_name)
+            if cat:
+                db.add(RecipeCategoryLink(
+                    id=generate_uuid(),
+                    recipe_id=recipe_id,
+                    category_id=cat.id
+                ))
+
+        # 添加调料关联
+        for sea_data in recipe_data.get("seasonings", []):
+            seasoning = seasoning_objects.get(sea_data["name"])
+            if seasoning:
+                db.add(RecipeSeasoning(
+                    id=generate_uuid(),
+                    recipe_id=recipe_id,
+                    seasoning_id=seasoning.id,
+                    quantity=sea_data.get("quantity"),
+                ))
 
     db.commit()
     print("种子数据初始化完成！")

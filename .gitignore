@@ -62,3 +62,6 @@ backend/logs/
 *.tmp
 *.temp
 *.bak
+
+# SQLite 临时数据库
+*.db

@@ -1,0 +1,97 @@
+"""调料管理模块测试"""
+import uuid
+import pytest
+from fastapi.testclient import TestClient
+
+
+class TestSeasoningsAPI:
+    """调料 API 测试类"""
+
+    def _create_category(self, client):
+        """创建调料分类"""
+        return client.post("/api/v1/categories?type=seasoning", json={"name": "基础调料"}).json()
+
+    def test_create_seasoning(self, client: TestClient):
+        """测试创建调料（自动生成拼音）"""
+        response = client.post(
+            "/api/v1/seasonings",
+            json={"canonical_name": "生抽"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["canonical_name"] == "生抽"
+        assert data["pinyin"] == "shengchou"
+
+    def test_create_seasoning_with_category(self, client: TestClient):
+        """测试创建带分类的调料"""
+        cat = self._create_category(client)
+        response = client.post(
+            "/api/v1/seasonings",
+            json={"canonical_name": "盐", "category_id": cat["id"]}
+        )
+        assert response.status_code == 201
+        assert response.json()["category_name"] == "基础调料"
+
+    def test_create_duplicate(self, client: TestClient):
+        """测试创建重复调料"""
+        client.post("/api/v1/seasonings", json={"canonical_name": "盐"})
+        response = client.post("/api/v1/seasonings", json={"canonical_name": "盐"})
+        assert response.status_code == 409
+
+    def test_search_by_pinyin(self, client: TestClient):
+        """测试拼音搜索"""
+        client.post("/api/v1/seasonings", json={"canonical_name": "生抽"})
+        client.post("/api/v1/seasonings", json={"canonical_name": "老抽"})
+
+        response = client.get("/api/v1/seasonings", params={"query": "sheng"})
+        assert response.status_code == 200
+        data = response.json()
+        names = [s["canonical_name"] for s in data["data"]]
+        assert "生抽" in names
+        assert "老抽" not in names
+
+    def test_search_by_name(self, client: TestClient):
+        """测试按名称搜索"""
+        client.post("/api/v1/seasonings", json={"canonical_name": "料酒"})
+        response = client.get("/api/v1/seasonings", params={"query": "料酒"})
+        assert response.json()["total"] == 1
+
+    def test_filter_by_category(self, client: TestClient):
+        """测试按分类筛选"""
+        cat = self._create_category(client)
+        client.post("/api/v1/seasonings", json={"canonical_name": "盐", "category_id": cat["id"]})
+        client.post("/api/v1/seasonings", json={"canonical_name": "酱油"})
+
+        response = client.get("/api/v1/seasonings", params={"category_id": cat["id"]})
+        data = response.json()
+        assert data["total"] == 1
+        assert data["data"][0]["canonical_name"] == "盐"
+
+    def test_get_seasoning(self, client: TestClient):
+        """测试获取调料详情"""
+        created = client.post("/api/v1/seasonings", json={"canonical_name": "醋"}).json()
+        response = client.get(f"/api/v1/seasonings/{created['id']}")
+        assert response.status_code == 200
+        assert response.json()["canonical_name"] == "醋"
+
+    def test_update_seasoning(self, client: TestClient):
+        """测试更新调料（重算拼音）"""
+        created = client.post("/api/v1/seasonings", json={"canonical_name": "醋"}).json()
+        response = client.patch(
+            f"/api/v1/seasonings/{created['id']}",
+            json={"canonical_name": "陈醋"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["canonical_name"] == "陈醋"
+        assert data["pinyin"] == "chencu"
+
+    def test_delete_seasoning(self, client: TestClient):
+        """测试删除调料"""
+        created = client.post("/api/v1/seasonings", json={"canonical_name": "味精"}).json()
+        response = client.delete(f"/api/v1/seasonings/{created['id']}")
+        assert response.status_code == 204
+
+        # 验证已删除
+        response = client.get(f"/api/v1/seasonings/{created['id']}")
+        assert response.status_code == 404

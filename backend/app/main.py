@@ -15,6 +15,12 @@ from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
 from app.api.recommendations import router as recommendations_router
 from app.api.ingestions import router as ingestions_router
+from app.api.categories import router as categories_router
+from app.api.seasonings import router as seasonings_router
+from app.api.favorites import router as favorites_router
+from app.api.history import router as history_router
+from app.api.menu import router as menu_router
+from app.api.discover import router as discover_router
 
 # 配置日志
 logger = setup_logging()
@@ -58,6 +64,12 @@ app.include_router(ingredients_router, prefix="/api/v1")
 app.include_router(inventory_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")
 app.include_router(ingestions_router, prefix="/api/v1")
+app.include_router(categories_router, prefix="/api/v1")
+app.include_router(seasonings_router, prefix="/api/v1")
+app.include_router(favorites_router, prefix="/api/v1")
+app.include_router(history_router, prefix="/api/v1")
+app.include_router(menu_router, prefix="/api/v1")
+app.include_router(discover_router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -23,13 +23,14 @@ def get_ingredient_service(db: Session = Depends(get_db)) -> IngredientService:
 @router.get("", response_model=IngredientListResponse)
 def list_ingredients(
     query: Optional[str] = Query(None, description="搜索关键词"),
-    category: Optional[str] = Query(None, description="分类筛选"),
+    category: Optional[str] = Query(None, description="分类筛选（旧字符串字段）"),
+    category_id: Optional[str] = Query(None, description="食材分类ID筛选"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     service: IngredientService = Depends(get_ingredient_service)
 ):
     """获取食材列表"""
-    request = IngredientSearchRequest(query=query, category=category)
+    request = IngredientSearchRequest(query=query, category=category, category_id=category_id)
     return service.search_ingredients(request, page=page, page_size=page_size)
 
 

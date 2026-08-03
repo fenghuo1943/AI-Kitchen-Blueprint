@@ -23,10 +23,17 @@ class RecipeStepBase(BaseModel):
     image_url: Optional[str] = Field(None, description="图片URL")
 
 
+class RecipeSeasoningBase(BaseModel):
+    """菜谱调料基础模式"""
+    seasoning_id: str = Field(..., description="调料ID")
+    quantity: Optional[str] = Field(None, description="用量")
+
+
 class RecipeBase(BaseModel):
     """菜谱基础模式"""
     title: str = Field(..., min_length=1, max_length=200, description="菜谱名称")
     summary: Optional[str] = Field(None, description="简述")
+    cover: Optional[str] = Field(None, description="封面图URL")
     servings: Optional[int] = Field(None, ge=1, description="份量")
     prep_minutes: Optional[int] = Field(None, ge=0, description="准备时间（分钟）")
     cook_minutes: Optional[int] = Field(None, ge=0, description="烹饪时间（分钟）")
@@ -39,17 +46,25 @@ class RecipeCreate(RecipeBase):
     ingredients: List[RecipeIngredientBase] = Field(default_factory=list, description="食材列表")
     steps: List[RecipeStepBase] = Field(default_factory=list, description="步骤列表")
     tags: List[str] = Field(default_factory=list, description="标签列表")
+    category_ids: List[str] = Field(default_factory=list, description="分类ID列表")
+    seasonings: List[RecipeSeasoningBase] = Field(default_factory=list, description="调料列表")
 
 
 class RecipeUpdate(BaseModel):
     """更新菜谱"""
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     summary: Optional[str] = None
+    cover: Optional[str] = None
     servings: Optional[int] = Field(None, ge=1)
     prep_minutes: Optional[int] = Field(None, ge=0)
     cook_minutes: Optional[int] = Field(None, ge=0)
     difficulty: Optional[str] = None
     status: Optional[str] = None
+    ingredients: Optional[List[RecipeIngredientBase]] = None
+    steps: Optional[List[RecipeStepBase]] = None
+    tags: Optional[List[str]] = None
+    category_ids: Optional[List[str]] = None
+    seasonings: Optional[List[RecipeSeasoningBase]] = None
 
 
 class RecipeIngredientResponse(BaseModel):
@@ -89,15 +104,42 @@ class RecipeTagResponse(BaseModel):
         from_attributes = True
 
 
+class RecipeSeasoningResponse(BaseModel):
+    """菜谱调料响应"""
+    id: str
+    seasoning_id: str
+    seasoning_name: str
+    quantity: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class RecipeCategoryItemResponse(BaseModel):
+    """菜谱分类项响应"""
+    id: str
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
 class RecipeResponse(RecipeBase):
     """菜谱响应"""
     id: str
+    pinyin: Optional[str]
     status: str
     revision: int
     created_by: Optional[str]
     ingredients: List[RecipeIngredientResponse] = []
     steps: List[RecipeStepResponse] = []
     tags: List[RecipeTagResponse] = []
+    seasonings: List[RecipeSeasoningResponse] = []
+    categories: List[RecipeCategoryItemResponse] = []
+    is_favorited: bool = False
+    is_in_today_menu: bool = False
+    cooked_count: int = 0
+    deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

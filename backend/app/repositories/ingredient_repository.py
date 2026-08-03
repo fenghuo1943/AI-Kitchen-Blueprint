@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from app.db.models import Ingredient, IngredientAlias
+from app.db.models import Ingredient, IngredientAlias, IngredientCategory
 
 
 class IngredientRepository:
@@ -35,6 +35,7 @@ class IngredientRepository:
         self,
         query: Optional[str] = None,
         category: Optional[str] = None,
+        category_id: Optional[str] = None,
         allergens_exclude: Optional[List[str]] = None,
         season_month: Optional[str] = None,
         page: int = 1,
@@ -43,16 +44,19 @@ class IngredientRepository:
         """搜索食材"""
         stmt = self.db.query(Ingredient).filter(Ingredient.deleted_at.is_(None))
 
-        # 关键词搜索
+        # 关键词搜索（名称、旧分类、拼音前缀）
         if query:
             search_filter = or_(
                 Ingredient.canonical_name.contains(query),
-                Ingredient.category.contains(query)
+                Ingredient.category.contains(query),
+                Ingredient.pinyin.like(f"{query}%")
             )
             stmt = stmt.filter(search_filter)
 
-        # 分类筛选
-        if category:
+        # 分类筛选（新分类ID优先）
+        if category_id:
+            stmt = stmt.filter(Ingredient.category_id == category_id)
+        elif category:
             stmt = stmt.filter(Ingredient.category == category)
 
         # 过敏原排除
@@ -124,3 +128,10 @@ class IngredientRepository:
         if exclude_id:
             stmt = stmt.filter(IngredientAlias.id != exclude_id)
         return stmt.count() > 0
+
+    def get_category_name(self, category_id: Optional[str]) -> Optional[str]:
+        """获取食材分类名称"""
+        if not category_id:
+            return None
+        cat = self.db.query(IngredientCategory).filter(IngredientCategory.id == category_id).first()
+        return cat.name if cat else None

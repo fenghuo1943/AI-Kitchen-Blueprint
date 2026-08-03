@@ -3,7 +3,13 @@
     <div class="header">
       <button @click="$router.back()" class="btn btn-secondary">← 返回</button>
       <div class="actions">
+        <button @click="toggleFavorite" :class="['btn', recipe.is_favorited ? 'btn-cancel' : 'btn-primary']">
+          {{ recipe.is_favorited ? '♥ 已收藏' : '♡ 收藏' }}
+        </button>
+        <button @click="openAddMenu" class="btn btn-secondary">📅 加入菜单</button>
         <button v-if="recipe.status === 'draft'" @click="publishRecipe" class="btn btn-primary">发布</button>
+        <button @click="goEdit" class="btn btn-secondary">✏️ 编辑</button>
+        <button @click="deleteRecipe" class="btn btn-danger">🗑 删除</button>
       </div>
     </div>
 
@@ -23,6 +29,10 @@
         <span v-for="tag in recipe.tags" :key="tag.id" class="tag">{{ tag.name }}</span>
       </div>
 
+      <div class="categories" v-if="recipe.categories.length > 0">
+        <span v-for="cat in recipe.categories" :key="cat.id" class="tag category-tag">📁 {{ cat.name }}</span>
+      </div>
+
       <section class="section">
         <h2>🥬 食材清单</h2>
         <ul class="ingredient-list">
@@ -33,6 +43,15 @@
             <span v-if="ing.optional" class="optional-badge">可选</span>
           </li>
         </ul>
+      </section>
+
+      <section class="section" v-if="recipe.seasonings.length > 0">
+        <h2>🧂 调料</h2>
+        <div class="seasoning-list">
+          <span v-for="sea in recipe.seasonings" :key="sea.id" class="seasoning-chip">
+            {{ sea.seasoning_name }} <em v-if="sea.quantity">{{ sea.quantity }}</em>
+          </span>
+        </div>
       </section>
 
       <section class="section">
@@ -46,6 +65,9 @@
           </li>
         </ol>
       </section>
+
+      <!-- 加入菜单弹窗 -->
+      <AddToMenuModal ref="menuModal" :recipe-id="recipe.id" />
 
       <div class="coverage-section">
         <h2>🥗 食材覆盖率</h2>
@@ -82,7 +104,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { recipeApi, recommendationApi } from '../services/api';
+import AddToMenuModal from '../components/AddToMenuModal.vue';
+import { recipeApi, recommendationApi, favoriteApi, getHouseholdId } from '../services/api';
+import { toast } from '../composables/useToast';
 import type { Recipe } from '../types';
 
 const route = useRoute();
@@ -91,11 +115,12 @@ const router = useRouter();
 const recipe = ref<Recipe | null>(null);
 const coverageInput = ref('');
 const coverageResult = ref<any>(null);
+const menuModal = ref();
 
 async function loadRecipe() {
   try {
     const id = route.params.id as string;
-    recipe.value = await recipeApi.get(id);
+    recipe.value = await recipeApi.get(id, getHouseholdId());
   } catch (error) {
     console.error('Failed to load recipe:', error);
   }
@@ -105,9 +130,54 @@ async function publishRecipe() {
   if (!recipe.value) return;
   try {
     await recipeApi.publish(recipe.value.id);
+    toast('已发布');
     loadRecipe();
   } catch (error) {
     console.error('Failed to publish recipe:', error);
+  }
+}
+
+async function toggleFavorite() {
+  if (!recipe.value) return;
+  const householdId = getHouseholdId();
+  if (!householdId) {
+    toast('请先创建/选择家庭（库存管理页）', 'error');
+    return;
+  }
+  try {
+    if (recipe.value.is_favorited) {
+      await favoriteApi.remove(recipe.value.id, householdId);
+      recipe.value.is_favorited = false;
+      toast('已取消收藏');
+    } else {
+      await favoriteApi.add(recipe.value.id, householdId);
+      recipe.value.is_favorited = true;
+      toast('已收藏');
+    }
+  } catch (e) {
+    console.error('favorite failed', e);
+  }
+}
+
+function openAddMenu() {
+  if (!recipe.value) return;
+  menuModal.value?.open();
+}
+
+function goEdit() {
+  if (!recipe.value) return;
+  router.push(`/recipes/${recipe.value.id}/edit`);
+}
+
+async function deleteRecipe() {
+  if (!recipe.value) return;
+  if (!window.confirm('确定删除该菜谱？将移入回收站，可恢复。')) return;
+  try {
+    await recipeApi.delete(recipe.value.id);
+    toast('已移入回收站');
+    router.push('/recipes');
+  } catch (error) {
+    console.error('Failed to delete recipe:', error);
   }
 }
 
@@ -172,7 +242,7 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 
 .tag {
@@ -181,6 +251,37 @@ onMounted(() => {
   border-radius: 16px;
   font-size: 13px;
   color: #666;
+}
+
+.categories {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.category-tag {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.seasoning-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.seasoning-chip {
+  background: #fff3cd;
+  color: #856404;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+
+.seasoning-chip em {
+  font-style: normal;
+  color: #b78a00;
 }
 
 .status-badge {
@@ -393,6 +494,20 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background: #d0d0d0;
+}
+
+.btn-cancel {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.btn-danger {
+  background: #f44336;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #d32f2f;
 }
 
 /* 移动端响应式样式 */

@@ -31,9 +31,29 @@
       @click="closeMobileMenu"
     ></div>
 
-    <main class="main-content">
+    <main class="main-content" :class="{ 'has-tabbar': isMobile }">
       <router-view />
     </main>
+
+    <!-- 移动端底部 tabbar -->
+    <nav v-if="isMobile" class="tabbar">
+      <router-link to="/recipes" class="tabbar-item" @click="closeMobileMenu">
+        <span class="tabbar-icon">🍳</span>
+        <span class="tabbar-label">菜谱库</span>
+      </router-link>
+      <router-link to="/menu" class="tabbar-item" @click="closeMobileMenu">
+        <span class="tabbar-icon">📅</span>
+        <span class="tabbar-label">菜单</span>
+      </router-link>
+      <router-link to="/discover" class="tabbar-item" @click="closeMobileMenu">
+        <span class="tabbar-icon">✨</span>
+        <span class="tabbar-label">发现</span>
+      </router-link>
+      <router-link to="/me" class="tabbar-item" @click="closeMobileMenu">
+        <span class="tabbar-icon">👤</span>
+        <span class="tabbar-label">我的</span>
+      </router-link>
+    </nav>
   </div>
 </template>
 
@@ -179,6 +199,11 @@ body {
   margin: 0 auto;
 }
 
+/* 移动端底部 tabbar */
+.tabbar {
+  display: none;
+}
+
 /* 响应式样式 */
 @media (max-width: 767px) {
   .navbar {
@@ -224,6 +249,46 @@ body {
 
   .main-content {
     padding: 16px;
+    padding-bottom: 76px; /* 为底部 tabbar 留空间 */
+  }
+
+  .main-content.has-tabbar {
+    padding-bottom: 76px;
+  }
+
+  /* 底部 tabbar 样式 */
+  .tabbar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: white;
+    border-top: 1px solid #eee;
+    z-index: 200;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .tabbar-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    color: #888;
+    font-size: 11px;
+  }
+
+  .tabbar-item.router-link-active {
+    color: #4a90d9;
+  }
+
+  .tabbar-icon {
+    font-size: 20px;
+    line-height: 1;
   }
 }
 
