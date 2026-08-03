@@ -1,7 +1,6 @@
 <template>
   <div class="discover">
     <div class="header">
-      <h1>✨ 发现</h1>
       <button class="btn btn-secondary" @click="loadAll">刷新</button>
     </div>
 
@@ -153,8 +152,7 @@ onMounted(loadAll);
 
 <style scoped>
 .discover { padding: 20px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.header h1 { margin: 0; }
+.header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 16px; }
 
 .section { margin-bottom: 28px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }

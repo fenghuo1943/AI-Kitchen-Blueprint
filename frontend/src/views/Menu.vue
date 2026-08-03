@@ -1,7 +1,6 @@
 <template>
   <div class="menu">
     <div class="header">
-      <h1>📅 菜单</h1>
       <div class="mode-switch">
         <button :class="['mode-btn', mode === 'calendar' ? 'active' : '']" @click="mode = 'calendar'">日历</button>
         <button :class="['mode-btn', mode === 'waterfall' ? 'active' : '']" @click="switchWaterfall">瀑布流</button>
@@ -209,8 +208,7 @@ onMounted(() => {
 
 <style scoped>
 .menu { padding: 20px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.header h1 { margin: 0; }
+.header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 16px; }
 
 .mode-switch { display: flex; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
 .mode-btn { padding: 8px 16px; border: none; background: white; cursor: pointer; font-size: 14px; }
@@ -279,7 +277,6 @@ onMounted(() => {
 @media (max-width: 767px) {
   .menu { padding: 16px; }
   .header { flex-direction: column; gap: 12px; align-items: stretch; }
-  .header h1 { text-align: center; }
   .mode-switch { width: 100%; }
   .mode-btn { flex: 1; }
   .calendar { padding: 8px; gap: 2px; }

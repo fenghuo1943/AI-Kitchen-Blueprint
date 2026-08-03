@@ -1,9 +1,7 @@
 <template>
   <div class="recipes">
-    <div class="header">
-      <h1>🍳 菜谱库</h1>
-      <button @click="goCreate" class="btn btn-primary">＋ 添加菜谱</button>
-    </div>
+    <!-- 右下角悬浮添加按钮 -->
+    <button @click="goCreate" class="fab" aria-label="添加菜谱">+</button>
 
     <!-- 顶部搜索 -->
     <div class="top-bar">
@@ -25,6 +23,7 @@
           <div :class="['match-mode-option', match === 'exact' ? 'active' : '']" @click="setMatch('exact')">精确</div>
           <div :class="['match-mode-option', match === 'any' ? 'active' : '']" @click="setMatch('any')">模糊</div>
         </div>
+        <span class="filter-count">共 {{ total }} 个菜谱</span>
         <span v-if="selectedIngredients.length" class="filter-count">已选{{ selectedIngredients.length }}食材</span>
       </div>
 
@@ -56,7 +55,6 @@
         </span>
       </div>
 
-      <span class="filter-count">共 {{ total }} 个菜谱</span>
     </div>
 
     <!-- 菜谱列表 -->
@@ -287,8 +285,30 @@ onMounted(async () => {
 
 <style scoped>
 .recipes { padding: 20px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .top-bar { display: flex; gap: 10px; margin-bottom: 12px; }
+
+/* 右下角悬浮添加按钮 */
+.fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fab:hover { background: #3a80c9; }
+.fab:active { transform: scale(0.95); }
 .search-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; min-height: 44px; }
 
 .filters {
@@ -344,9 +364,7 @@ onMounted(async () => {
 
 @media (max-width: 767px) {
   .recipes { padding: 16px; }
-  .header { flex-direction: column; gap: 12px; align-items: stretch; }
-  .header h1 { text-align: center; margin: 0; }
-  .header .btn { width: 100%; }
+  .fab { right: 16px; bottom: 80px; width: 52px; height: 52px; font-size: 28px; }
   .top-bar { flex-direction: column; }
   .top-bar .btn { width: 100%; }
   .filter-row { gap: 8px; }
