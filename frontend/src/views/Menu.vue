@@ -33,15 +33,18 @@
 
       <!-- 选中日期的菜单 -->
       <div v-if="dayMenu" class="day-detail">
-        <h2>{{ selectedDate }} 菜单</h2>
         <div v-if="dayMenu.ing_list.length || dayMenu.sea_list.length" class="shopping-list">
-          <div v-if="dayMenu.ing_list.length">
+          <div v-if="dayMenu.ing_list.length" class="shopping-row">
             <h3>🥬 今日食材</h3>
-            <span v-for="ing in dayMenu.ing_list" :key="ing.id" class="shop-chip">{{ ing.name }}</span>
+            <div class="shop-chips">
+              <span v-for="ing in dayMenu.ing_list" :key="ing.id" class="shop-chip">{{ ing.name }}</span>
+            </div>
           </div>
-          <div v-if="dayMenu.sea_list.length">
+          <div v-if="dayMenu.sea_list.length" class="shopping-row">
             <h3>🧂 今日调料</h3>
-            <span v-for="sea in dayMenu.sea_list" :key="sea.id" class="shop-chip sea">{{ sea.name }}</span>
+            <div class="shop-chips">
+              <span v-for="sea in dayMenu.sea_list" :key="sea.id" class="shop-chip sea">{{ sea.name }}</span>
+            </div>
           </div>
         </div>
 
@@ -238,8 +241,9 @@ onMounted(() => {
 .day-detail { background: white; border-radius: 12px; padding: 16px; }
 .day-detail h2 { margin: 0 0 12px 0; font-size: 1.1rem; }
 .shopping-list { background: #f9f9f9; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-.shopping-list h3 { margin: 8px 0; font-size: 13px; color: #666; }
-.shopping-list h3:first-child { margin-top: 0; }
+.shopping-list h3 { margin: 0; font-size: 13px; color: #666; white-space: nowrap; }
+.shopping-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.shop-chips { display: flex; flex-wrap: wrap; align-items: center; }
 .shop-chip {
   display: inline-block; background: #d4edda; color: #155724; padding: 4px 10px;
   border-radius: 12px; font-size: 12px; margin: 0 4px 4px 0;

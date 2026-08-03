@@ -195,16 +195,22 @@ function openAddMenu() {
     column-gap: 12px;
   }
   .recipe-title-row {
+    display: contents;
+  }
+  .recipe-title {
     grid-column: 1;
     grid-row: 1;
     min-width: 0;
   }
-  .recipe-title {
-    min-width: 0;
+  .in-menu-badge {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: start;
+    align-self: center;
   }
   .recipe-summary {
     grid-column: 2;
-    grid-row: 1 / 3;
+    grid-row: 2;
     min-width: 0;
     min-height: 5.2em;
     max-height: 5.2em;
