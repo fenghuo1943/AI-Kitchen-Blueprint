@@ -149,7 +149,7 @@ async function publishRecipe() {
   if (!recipe.value) return;
   try {
     await recipeApi.publish(recipe.value.id);
-    appStore.bumpRecipeVersion(); // 状态变化，通知缓存的菜谱库列表需要刷新
+    appStore.bumpRecipeVersion('publish'); // 状态变化，通知缓存的菜谱库列表需要刷新
     toast('已发布');
     loadRecipe();
   } catch (error) {

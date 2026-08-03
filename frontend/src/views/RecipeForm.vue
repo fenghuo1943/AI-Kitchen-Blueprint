@@ -305,12 +305,12 @@ async function save() {
     };
     if (isEdit.value) {
       await recipeApi.update(route.params.id as string, payload);
-      appStore.bumpRecipeVersion(); // 通知缓存的菜谱库列表需要刷新
+      appStore.bumpRecipeVersion('update'); // 通知缓存的菜谱库列表需要刷新
       toast('保存成功');
       router.push(`/recipes/${route.params.id}`);
     } else {
       const recipe = await recipeApi.create(payload);
-      appStore.bumpRecipeVersion(); // 通知缓存的菜谱库列表需要刷新
+      appStore.bumpRecipeVersion('create'); // 通知缓存的菜谱库列表需要刷新
       toast('创建成功');
       router.push(`/recipes/${recipe.id}`);
     }

@@ -297,6 +297,7 @@ onMounted(async () => {
     searchInput.value = q;
   }
   loadedVersion = appStore.recipeVersion;
+  console.log(`[recipeVersion] 菜谱库首次挂载，记录 loadedVersion=${loadedVersion}，加载列表`);
   loadRecipes();
   try {
     const [rc, ic, ings] = await Promise.all([
@@ -316,8 +317,11 @@ onMounted(async () => {
 // 数据未变（recipeVersion 相同）则不刷新，保留筛选与列表；菜谱有增删改才重新拉取
 onActivated(() => {
   if (loadedVersion !== appStore.recipeVersion) {
+    console.log(`[recipeVersion] 菜谱库重新激活：loadedVersion=${loadedVersion} ≠ recipeVersion=${appStore.recipeVersion}，重新拉取`);
     loadedVersion = appStore.recipeVersion;
     loadRecipes();
+  } else {
+    console.log(`[recipeVersion] 菜谱库重新激活：版本未变（${loadedVersion}），跳过刷新`);
   }
 });
 
@@ -325,6 +329,7 @@ onActivated(() => {
 watch(() => route.query.q, (q) => {
   searchInput.value = (q as string) || '';
   page.value = 1;
+  console.log(`[recipeVersion] 路由参数 q 变化触发刷新，keyword="${searchInput.value}"`);
   loadRecipes();
 });
 </script>

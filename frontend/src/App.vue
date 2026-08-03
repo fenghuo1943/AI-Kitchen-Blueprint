@@ -33,9 +33,11 @@
 
     <main class="main-content" :class="{ 'has-tabbar': isMobile }">
       <!-- 仅缓存菜谱库：从详情返回时不重新挂载/刷新，保留筛选与滚动位置 -->
-      <KeepAlive include="Recipes">
-        <router-view />
-      </KeepAlive>
+      <router-view v-slot="{ Component }">
+        <KeepAlive include="Recipes">
+          <component :is="Component" />
+        </KeepAlive>
+      </router-view>
     </main>
 
     <!-- 移动端底部 tabbar -->
