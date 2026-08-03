@@ -1,10 +1,70 @@
+import sys
+from pathlib import Path
 from fastapi import FastAPI
-from app.api.recipes import router as recipes_router
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="AI Kitchen Assistant", version="0.1.0")
+# 确保项目根目录在 Python 路径中
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.db.database import init_db
+from app.api.recipes import router as recipes_router
+from app.api.ingredients import router as ingredients_router
+from app.api.inventory import router as inventory_router
+from app.api.recommendations import router as recommendations_router
+from app.api.ingestions import router as ingestions_router
+
+# 配置日志
+logger = setup_logging()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("应用启动中...")
+    logger.info(f"数据库连接: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
+
+    # 初始化数据库
+    logger.info("初始化数据库...")
+    init_db()
+    logger.info("数据库初始化完成")
+
+    yield
+
+    logger.info("应用关闭中...")
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    debug=settings.APP_DEBUG,
+    lifespan=lifespan
+)
+
+# 配置 CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 注册路由（路由已经在各自的 router 中定义了前缀）
 app.include_router(recipes_router)
+app.include_router(ingredients_router)
+app.include_router(inventory_router)
+app.include_router(recommendations_router)
+app.include_router(ingestions_router)
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    """健康检查接口"""
+    return {
+        "status": "healthy",
+        "version": settings.APP_VERSION,
+        "environment": settings.APP_ENV
+    }
