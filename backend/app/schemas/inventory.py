@@ -78,3 +78,11 @@ class HouseholdResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class HouseholdListResponse(BaseModel):
+    """家庭列表响应"""
+    data: List[HouseholdResponse]
+    total: int
+    page: int
+    page_size: int

@@ -9,7 +9,8 @@ from app.repositories.ingredient_repository import IngredientRepository
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
-    InventoryListResponse, InventorySearchRequest, HouseholdCreate, HouseholdResponse
+    InventoryListResponse, InventorySearchRequest, HouseholdCreate, HouseholdResponse,
+    HouseholdListResponse
 )
 
 router = APIRouter(prefix="/inventory", tags=["库存管理"])
@@ -30,6 +31,16 @@ def create_household(
 ):
     """创建家庭"""
     return service.create_household(data)
+
+
+@router.get("/households", response_model=HouseholdListResponse)
+def list_households(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    service: InventoryService = Depends(get_inventory_service)
+):
+    """获取家庭列表"""
+    return service.list_households(page=page, page_size=page_size)
 
 
 @router.get("/households/{household_id}", response_model=HouseholdResponse)

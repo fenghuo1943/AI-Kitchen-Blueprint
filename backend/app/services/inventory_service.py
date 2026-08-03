@@ -8,7 +8,8 @@ from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
-    InventoryListResponse, InventorySearchRequest, HouseholdCreate, HouseholdResponse
+    InventoryListResponse, InventorySearchRequest, HouseholdCreate, HouseholdResponse,
+    HouseholdListResponse
 )
 
 
@@ -132,6 +133,25 @@ class InventoryService:
             description=household.description,
             created_at=household.created_at,
             updated_at=household.updated_at
+        )
+
+    def list_households(self, page: int = 1, page_size: int = 20) -> HouseholdListResponse:
+        """获取家庭列表"""
+        households, total = self.inventory_repository.list_households(page, page_size)
+        return HouseholdListResponse(
+            data=[
+                HouseholdResponse(
+                    id=h.id,
+                    name=h.name,
+                    description=h.description,
+                    created_at=h.created_at,
+                    updated_at=h.updated_at
+                )
+                for h in households
+            ],
+            total=total,
+            page=page,
+            page_size=page_size
         )
 
     def get_household(self, household_id: str) -> Optional[HouseholdResponse]:

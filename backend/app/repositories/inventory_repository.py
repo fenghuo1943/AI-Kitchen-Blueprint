@@ -114,6 +114,14 @@ class InventoryRepository:
         """获取家庭信息"""
         return self.db.query(Household).filter(Household.id == household_id).first()
 
+    def list_households(self, page: int = 1, page_size: int = 20) -> Tuple[List[Household], int]:
+        """获取家庭列表"""
+        stmt = self.db.query(Household)
+        total = stmt.count()
+        offset = (page - 1) * page_size
+        households = stmt.offset(offset).limit(page_size).all()
+        return households, total
+
     def create_household(self, household: Household) -> Household:
         """创建家庭"""
         self.db.add(household)
