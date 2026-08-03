@@ -12,7 +12,7 @@
         class="search-input"
         @input="debouncedSearch"
       />
-      <button @click="clearFilters" class="btn btn-secondary">清除筛选</button>
+      <button @click="clearFilters" class="btn clear-btn">清除筛选</button>
     </div>
 
     <!-- 筛选面板 -->
@@ -346,6 +346,7 @@ onMounted(async () => {
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-primary { background: #4a90d9; color: white; }
 .btn-secondary { background: #f0f0f0; color: #333; }
+.clear-btn { background: #4a90d9; color: white; flex-shrink: 0; white-space: nowrap; }
 
 /* 食材弹窗 */
 .modal-overlay {
@@ -365,11 +366,11 @@ onMounted(async () => {
 @media (max-width: 767px) {
   .recipes { padding: 16px; }
   .fab { right: 16px; bottom: 80px; width: 52px; height: 52px; font-size: 28px; }
-  .top-bar { flex-direction: column; }
-  .top-bar .btn { width: 100%; }
+  .top-bar { flex-direction: row; align-items: center; }
+  .clear-btn { padding: 10px 12px; }
   .filter-row { gap: 8px; }
   .filter-select { flex: 1; min-width: 0; }
-  .recipe-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .recipe-grid { grid-template-columns: 1fr; gap: 10px; }
   .modal-overlay { padding: 0; align-items: flex-end; }
   .modal { border-radius: 12px 12px 0 0; max-height: 90vh; }
 }

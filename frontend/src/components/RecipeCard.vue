@@ -4,15 +4,17 @@
       <img :src="recipe.cover" :alt="recipe.title" />
     </div>
     <div class="recipe-body">
-      <div class="recipe-title-row">
-        <h3 class="recipe-title">{{ recipe.title }}</h3>
-        <span v-if="recipe.is_in_today_menu" class="in-menu-badge">今日菜单</span>
-      </div>
-      <p v-if="recipe.summary" class="recipe-summary">{{ recipe.summary }}</p>
-      <div class="recipe-meta">
-        <span v-if="totalMinutes">⏱️ {{ totalMinutes }}分钟</span>
-        <span v-if="recipe.difficulty">📊 {{ recipe.difficulty }}</span>
-        <span v-if="recipe.cooked_count">🔥 做过{{ recipe.cooked_count }}次</span>
+      <div class="recipe-main">
+        <div class="recipe-title-row">
+          <h3 class="recipe-title">{{ recipe.title }}</h3>
+          <span v-if="recipe.is_in_today_menu" class="in-menu-badge">今日菜单</span>
+        </div>
+        <p v-if="recipe.summary" class="recipe-summary">{{ recipe.summary }}</p>
+        <div class="recipe-meta">
+          <span v-if="totalMinutes">⏱️ {{ totalMinutes }}分钟</span>
+          <span v-if="recipe.difficulty">📊 {{ recipe.difficulty }}</span>
+          <span v-if="recipe.cooked_count">🔥 做过{{ recipe.cooked_count }}次</span>
+        </div>
       </div>
       <div class="recipe-actions" @click.stop>
         <button
@@ -22,7 +24,7 @@
           {{ recipe.is_favorited ? '♥ 已收藏' : '♡ 收藏' }}
         </button>
         <button class="btn-small btn-confirm" @click="openAddMenu">
-          📅 加入菜单
+          加入菜单
         </button>
       </div>
     </div>
@@ -100,6 +102,13 @@ function openAddMenu() {
   flex: 1;
 }
 
+.recipe-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
 .recipe-title-row {
   display: flex;
   justify-content: space-between;
@@ -171,6 +180,47 @@ function openAddMenu() {
 @media (max-width: 767px) {
   .recipe-cover {
     height: 120px;
+  }
+  .recipe-body {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .recipe-main {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 45%) 1fr;
+    grid-template-rows: auto 1fr;
+    column-gap: 12px;
+  }
+  .recipe-title-row {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .recipe-title {
+    min-width: 0;
+  }
+  .recipe-summary {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    min-width: 0;
+    min-height: 5.2em;
+    max-height: 5.2em;
+    line-height: 1.3;
+    display: block;
+    overflow: hidden;
+  }
+  .recipe-meta {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+  }
+  .recipe-actions {
+    flex-direction: column;
+    margin-top: 0;
+    flex-shrink: 0;
   }
 }
 </style>
