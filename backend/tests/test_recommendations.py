@@ -124,7 +124,8 @@ class TestRecommendationEngine:
         """测试部分匹配的覆盖率计算"""
         from app.domain.recommendation import RecommendationEngine
 
-        required = [("鸡蛋", False), ("番茄", False), ("葱", True)]
+        # 测试缺少必需食材的情况
+        required = [("鸡蛋", False), ("番茄", False), ("葱", False)]
         available = ["鸡蛋", "番茄"]
 
         coverage, matched, missing = RecommendationEngine.calculate_ingredient_coverage(

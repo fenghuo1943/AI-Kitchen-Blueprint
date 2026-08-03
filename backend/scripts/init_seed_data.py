@@ -1,4 +1,11 @@
 """初始化种子数据"""
+import sys
+from pathlib import Path
+
+# 添加 backend 目录到 Python 路径
+backend_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(backend_dir))
+
 import json
 import uuid
 from datetime import datetime

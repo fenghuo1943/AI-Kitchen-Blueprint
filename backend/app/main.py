@@ -52,12 +52,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册路由（路由已经在各自的 router 中定义了前缀）
-app.include_router(recipes_router)
-app.include_router(ingredients_router)
-app.include_router(inventory_router)
-app.include_router(recommendations_router)
-app.include_router(ingestions_router)
+# 注册路由（添加 /api/v1 前缀）
+app.include_router(recipes_router, prefix="/api/v1")
+app.include_router(ingredients_router, prefix="/api/v1")
+app.include_router(inventory_router, prefix="/api/v1")
+app.include_router(recommendations_router, prefix="/api/v1")
+app.include_router(ingestions_router, prefix="/api/v1")
 
 
 @app.get("/health")

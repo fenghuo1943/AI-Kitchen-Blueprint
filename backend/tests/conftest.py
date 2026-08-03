@@ -1,27 +1,41 @@
 """测试配置和 fixtures"""
 import os
+import sys
+from pathlib import Path
+
+# 设置测试环境变量
+os.environ["APP_ENV"] = "testing"
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
+# 添加 backend 目录到 Python 路径
+backend_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(backend_dir))
+
+# 使用 SQLite 内存数据库进行测试（避免依赖外部数据库）
+TEST_DATABASE_URL = "sqlite:///:memory:"
+
+# 创建测试引擎
+test_engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+# 导入应用（在设置好测试数据库之后）
 from app.main import app
 from app.db.database import Base, get_db
-from app.core.config import settings
+import app.db.database as db_module
 
 
-# 使用测试数据库（优先使用环境变量，否则使用 MariaDB 测试数据库）
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/cook_test?charset=utf8mb4"
-)
-
-engine = create_engine(
-    TEST_DATABASE_URL,
-    pool_pre_ping=True,
-    echo=False
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# 覆盖数据库引擎和会话工厂
+db_module._engine = test_engine
+db_module._SessionLocal = TestingSessionLocal
 
 
 def override_get_db():
@@ -36,35 +50,29 @@ def override_get_db():
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
     """测试前创建数据库表"""
-    # 创建测试数据库（如果不存在）
-    from sqlalchemy import text
-    try:
-        engine.connect().execute(text("SELECT 1"))
-    except Exception:
-        # 数据库不存在，尝试创建
-        test_db_url = f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}"
-        temp_engine = create_engine(test_db_url)
-        with temp_engine.connect() as conn:
-            conn.execute(text(f"CREATE DATABASE IF NOT EXISTS cook_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"))
-            conn.commit()
-        temp_engine.dispose()
-
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(autouse=True)
 def db_session():
-    """每个测试函数使用独立的数据库会话"""
-    connection = engine.connect()
+    """每个测试函数使用独立的数据库会话，并在测试后回滚"""
+    # 清理所有表的数据（保留表结构）
+    with test_engine.connect() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
+        conn.commit()
+
+    connection = test_engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
 
     yield session
 
     session.close()
-    transaction.rollback()
+    if transaction.is_active:
+        transaction.rollback()
     connection.close()
 
 

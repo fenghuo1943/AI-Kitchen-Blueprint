@@ -14,8 +14,11 @@ class IngredientRepository:
         self.db = db
 
     def get_by_id(self, ingredient_id: str) -> Optional[Ingredient]:
-        """根据ID获取食材"""
-        return self.db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
+        """根据ID获取食材（排除已删除的）"""
+        return self.db.query(Ingredient).filter(
+            Ingredient.id == ingredient_id,
+            Ingredient.deleted_at.is_(None)
+        ).first()
 
     def get_by_name(self, name: str) -> Optional[Ingredient]:
         """根据标准名称获取食材"""
