@@ -1,0 +1,6 @@
+{
+    "require": {
+        "overtrue/pinyin": "^6.0",
+        "firebase/php-jwt": "^7.0"
+    }
+}

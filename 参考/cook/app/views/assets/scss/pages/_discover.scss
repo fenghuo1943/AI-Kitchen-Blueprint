@@ -1,0 +1,15 @@
+@use "../base/variables" as *;
+.discover{
+    &-section{
+        margin-bottom: 10px;
+    }
+}
+.section-header{
+border-bottom: 2px solid $gray;
+margin-bottom: 10px;
+h2{
+    margin-bottom: 5px;
+    margin-top: 0;
+    font-size: 20px;
+}
+}

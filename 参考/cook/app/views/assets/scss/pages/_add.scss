@@ -1,0 +1,33 @@
+@use '../base/variables' as *;
+@use '../base/mixins';
+
+#recipeForm {
+    display: flex;
+    flex-direction: column;
+    margin-left: $page-padding;
+    margin-right: $page-padding;
+    gap: 12px;
+
+    /* 所有子元素自动间距 */
+    input,
+    textarea {
+        //width: 100%;
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid $gray;
+    }
+
+    h3 {
+        text-align: center;
+        margin-bottom: 5px;
+        margin-top: 5px;
+    }
+}
+
+#formTitle {
+    h2 {
+        text-align: center;
+        margin-bottom: 5px;
+        margin-top: 5px;
+    }
+}

@@ -1,0 +1,64 @@
+@use "../../base/mixins";
+@use "../../base/variables" as *;
+
+.btn {
+    $btn-color: white;
+
+    &-small {
+        @include mixins.btn-small;
+    }
+
+    &-normal {
+        @include mixins.btn-normal;
+    }
+
+    &-confirm {
+        @include mixins.btn-confirm;
+    }
+
+    &-cancel {
+        @include mixins.btn-cancel;
+    }
+
+
+
+    &-back {
+        padding: 6px 10px;
+        background: transparent;
+        color: $primary;
+        border: 1px solid rgba(7, 132, 255, 0.15);
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: background 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+        box-shadow: none;
+
+        &:hover {
+            background: rgba(7, 132, 255, 0.06);
+            //transform: translateX(-2px);
+            box-shadow: 0 6px 14px rgba(7, 132, 255, 0.06);
+        }
+
+        &:active {
+            transform: translateX(0);
+            background: rgba(7, 132, 255, 0.09);
+        }
+    }
+
+    &-action {
+        flex: 1;
+        display: inline-block;
+        padding: 10px 15px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-size: 14px;
+        text-align: center;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+}

@@ -1,0 +1,37 @@
+/* 底部导航 */
+@use "../base/variables" as *;
+.tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #fff;
+    display: flex;
+    width: 100%;
+    //max-width: $max-width;
+    margin: 0 auto;
+    padding: 10px;
+    align-self: center;
+    align-items: center;
+    border-top: 1px solid $gray;
+
+    a {
+        flex: 1;
+        text-align: center;
+        text-decoration: none;
+        color: #999;
+        font-size: 12px;
+        padding-top: 6px;
+
+        &.active {
+            color: #111;
+        }
+    }
+
+    .icon {
+        font-size: 20px;
+        display: block;
+        margin-bottom: 2px;
+    }
+}

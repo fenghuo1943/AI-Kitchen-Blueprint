@@ -1,0 +1,15 @@
+# 位于 /cook/.htaccess
+RewriteEngine On
+
+# 如果请求的是 assets 或 uploads 静态资源，直接映射到 app/view/ 下对应目录
+RewriteRule ^assets/(.*)$ app/views/assets/$1 [L]
+RewriteRule ^uploads/(.*)$ app/views/uploads/$1 [L]
+
+# 如果请求的文件或目录真实存在，直接返回
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# 其他请求走 index.php
+RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
+RewriteRule ^api/(.*)$ index.php?route=api/$1 [L]

@@ -94,7 +94,7 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 300;
 }
 
 .nav-brand {

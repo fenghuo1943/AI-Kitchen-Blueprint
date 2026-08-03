@@ -1,0 +1,126 @@
+@use "../base/mixins";
+@use "../base/variables" as *;
+
+.profile-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid $gray;
+
+    h2 {
+        margin: 0 0 15px 0;
+    }
+}
+
+.avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: $gray;
+    margin: 0 auto 10px;
+}
+
+.menu-item {
+    padding: 15px;
+    background: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid $gray;
+    transition: all 0.3s;
+    text-decoration: none;
+    color: #333;
+    display: block;
+
+    &:hover {
+        border-color: #08f;
+        box-shadow: 0 4px 12px rgba(0, 136, 255, 0.2);
+        transform: translateX(4px);
+    }
+
+    &-title {
+        font-size: 15px;
+        font-weight: 500;
+    }
+}
+
+
+.content-page {
+    display: none;
+
+    &.active {
+        display: block;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+.button-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid $gray;
+}
+
+
+.add-section {
+    display: flex;
+    margin-bottom: 20px;
+    align-items: center;
+    //padding: 15px;
+    border-radius: 8px;
+    gap: 6px;
+
+    input,
+    select {
+        @include mixins.input-normal;
+
+    }
+
+    button {
+        @include mixins.btn-normal;
+        @include mixins.btn-confirm;
+    }
+}
+
+.modal {
+    &-box {
+        background: white;
+        text-align: center;
+        padding: 25px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 400px;
+
+        h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid $gray;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        button {
+            @include mixins.btn-normal;
+        }
+    }
+
+    &-actions {
+        justify-content: center;
+        /* 水平居中 */
+        display: flex;
+        gap: 20px;
+    }
+
+    &-overlay {
+        @include mixins.modal-overlay;
+    }
+}

@@ -1,0 +1,91 @@
+@use "../../base/mixins";
+@use "../../base/variables" as *;
+.selectModal {
+    &-overlay {
+        @include mixins.modal-overlay;
+
+        input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid $gray;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+            min-width: 50px;
+        }
+
+        select {
+            padding: 8px;
+            border: 1px solid $gray;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+    }
+
+    &-box {
+        display: flex;
+        flex-direction: column;
+        background: white;
+        text-align: center;
+        padding: 25px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 400px;
+        gap: 10px;
+
+        h3 {
+            margin: 0;
+        }
+
+        button {
+            @include mixins.btn-normal;
+        }
+    }
+
+    &-actions {
+        justify-content: center;
+        /* 水平居中 */
+        display: flex;
+        gap: 20px;
+    }
+
+    &-list {
+        display: flex;
+        max-height: 300px;
+        overflow-y: auto;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-start;
+        /* 关键：靠左 */
+        align-content: flex-start;
+        /* 多行也靠上 */
+        label {
+            //background: $gray;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            padding-right: 0;
+            //font-size: 14px;
+            //cursor: pointer;
+        }
+        &.hide {
+            display: none;
+        }
+    }
+
+    &-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    &-content {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 1;
+        
+    }
+
+}

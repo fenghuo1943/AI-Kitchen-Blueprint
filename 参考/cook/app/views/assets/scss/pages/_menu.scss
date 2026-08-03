@@ -1,0 +1,116 @@
+@use "../base/mixins";
+@use "../base/variables" as *;
+
+.menu-mode-switch {
+    display: flex;
+    //gap: 10px;
+    //margin-bottom: 15px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-left: $page-padding;
+    margin-right: $page-padding;
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    
+    @include mixins.btn-gray;
+    &.active {
+        @include mixins.btn-confirm;
+        &:hover {
+        box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+    }
+}
+
+.date-picker {
+    margin-bottom: 15px;
+}
+
+
+
+/* 瀑布流日期卡片 */
+.day {
+    &-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 15px;
+        margin-bottom: 15px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+    }
+
+    &-title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    &-recipes {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+
+.calendar {
+    background: #fff;
+    border-radius: 16px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+
+    &-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    button {
+        @include mixins.btn-normal;
+        background: $gray;
+    }
+
+    &-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+        text-align: center;
+    }
+
+    &-weekday {
+        font-size: 12px;
+        color: #999;
+    }
+
+    &-day {
+        padding: 6px 0;
+        border-radius: 10px;
+        cursor: pointer;
+
+        &:hover {
+            background: $gray;
+        }
+
+        &.today {
+            border: 1px solid #111;
+        }
+
+        &.selected {
+            background: $primary;
+            color: $light;
+        }
+        &.has-menu {
+            color: #ff5722;
+        }
+        /* &.has-menu::after {
+            content: '•';
+            display: block;
+            font-size: 10px;
+            margin-top: 2px;
+            color: #ff5722;
+        } */
+    }
+
+}

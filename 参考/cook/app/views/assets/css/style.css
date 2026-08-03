@@ -1,0 +1,1143 @@
+@charset "UTF-8";
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  padding-bottom: 60px;
+  background: #f5f6f8;
+  color: #333;
+  user-select: none;
+}
+
+.header {
+  padding: 20px 15px 10px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+*:focus {
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  transition: 0.2s;
+}
+button:hover, button:active {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #eee;
+}
+.page-header h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active {
+  display: flex;
+}
+
+.html11 {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.end-msg {
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+.btn-normal {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+.btn-confirm {
+  background: #0784ff;
+  color: white;
+}
+.btn-cancel {
+  background: #f44;
+  color: white;
+}
+.btn-back {
+  padding: 6px 10px;
+  background: transparent;
+  color: #0784ff;
+  border: 1px solid rgba(7, 132, 255, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+  box-shadow: none;
+}
+.btn-back:hover {
+  background: rgba(7, 132, 255, 0.06);
+  box-shadow: 0 6px 14px rgba(7, 132, 255, 0.06);
+}
+.btn-back:active {
+  transform: translateX(0);
+  background: rgba(7, 132, 255, 0.09);
+}
+.btn-action {
+  flex: 1;
+  display: inline-block;
+  padding: 10px 15px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.fab {
+  position: fixed;
+  bottom: 80px;
+  right: max(20px, (100vw - 900px) / 2 + 20px);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 56px;
+  font-size: 28px;
+  text-decoration: none;
+  background: #2196f3;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+.fab.hide {
+  transform: translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.list-recipe {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+.list-recipe h3 {
+  font-size: 16px;
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+.list-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.empty-msg {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+}
+
+.item-modal {
+  display: inline-block;
+  padding: 6px 10px;
+  background: #eee;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 5px;
+}
+.item-modal.selected {
+  background: #0784ff;
+  color: white;
+}
+.item-modal:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.item-chosen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eee;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.item-chosen input {
+  min-width: 10px;
+  flex: 1;
+  width: 6ch;
+}
+.item-chosen .remove-x {
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 0 6px;
+}
+.item-chosen .remove-x :hover {
+  color: #ffd2d2;
+}
+
+.item {
+  display: flex;
+  transition: 0.2s;
+  border: 1px solid #eee;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.item-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.item-meta {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+.item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.selectModal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+}
+.selectModal-overlay.active {
+  display: flex;
+}
+.selectModal-overlay input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+  min-width: 50px;
+}
+.selectModal-overlay select {
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.selectModal-box {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  text-align: center;
+  padding: 25px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  gap: 10px;
+}
+.selectModal-box h3 {
+  margin: 0;
+}
+.selectModal-box button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+.selectModal-actions {
+  justify-content: center;
+  /* 水平居中 */
+  display: flex;
+  gap: 20px;
+}
+.selectModal-list {
+  display: flex;
+  max-height: 300px;
+  overflow-y: auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+  /* 关键：靠左 */
+  align-content: flex-start;
+  /* 多行也靠上 */
+}
+.selectModal-list label {
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+  padding-right: 0;
+}
+.selectModal-list.hide {
+  display: none;
+}
+.selectModal-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.selectModal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.recipe-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+}
+.recipe-modal-overlay.active {
+  display: flex;
+}
+.recipe-modal-overlay {
+  z-index: 9999;
+}
+.recipe-modal-content {
+  background: white;
+  border-radius: 0;
+  width: 100vw;
+  /* 修改：使用视口宽度确保完全覆盖 */
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: none;
+  margin: 0;
+  /* 修改：移除默认margin */
+}
+.recipe-modal-body {
+  padding: 10px;
+  padding-top: 20px;
+  width: 100%;
+  /* 修改：确保内容宽度占满 */
+  max-width: 800px;
+  /* 修改：限制最大宽度而不是固定宽度 */
+  margin: 0 auto;
+  /* 修改：居中对齐 */
+  padding-bottom: 50px;
+  /* 为底部导航栏留出空间 */
+  box-sizing: border-box;
+  /* 修改：确保padding包含在width内 */
+}
+.recipe-modal-favorite {
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 10001;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+.recipe-modal-favorite:hover {
+  background: rgb(255, 255, 255);
+  transform: scale(1.1);
+}
+.recipe-modal-edit {
+  min-width: 94px;
+  padding: 6px 12px;
+  background: transparent;
+  color: #0784ff;
+  border: 1px solid rgba(7, 132, 255, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+  box-shadow: none;
+  z-index: 10001;
+}
+.recipe-modal-edit:hover {
+  background: rgba(7, 132, 255, 0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(7, 132, 255, 0.06);
+}
+.recipe-modal-edit:active {
+  transform: translateY(0);
+  background: rgba(7, 132, 255, 0.09);
+}
+.recipe-modal-cover {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 25px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+.recipe-modal-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+.recipe-modal-meta {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #666;
+  font-size: 16px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+.recipe-modal-description {
+  line-height: 1.3;
+  font-size: 16px;
+  color: #555;
+  text-align: left;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.recipe-modal-list-small {
+  display: flex;
+  overflow-y: auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+  /* 关键：靠左 */
+  align-content: flex-start;
+  /* 多行也靠上 */
+}
+.recipe-modal-list-large {
+  display: flex;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-start;
+  /* 关键：靠左 */
+  align-content: flex-start;
+  /* 多行也靠上 */
+}
+.recipe-modal-item-small {
+  display: inline-block;
+  padding: 6px 10px;
+  background: #eee;
+  border-radius: 4px;
+  user-select: none;
+}
+.recipe-modal-item-large {
+  display: flex;
+  transition: 0.2s;
+  border: 1px solid #eee;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  display: list-item;
+  /* 必须设置，marker 才有效 */
+  list-style: decimal;
+}
+.recipe-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+.recipe-modal-section h3 {
+  font-size: 18px;
+  margin-top: 0px;
+  margin-bottom: 0px;
+  color: #333;
+  text-align: center;
+  font-weight: 500;
+  padding-bottom: 5px;
+  border-bottom: 2px solid #eee;
+}
+.recipe-modal-section ol,
+.recipe-modal-section ul {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.recipe-modal-ingredients ul, .recipe-modal-steps ol {
+  padding-left: 0;
+  list-style: none;
+}
+.recipe-modal-ingredients li, .recipe-modal-steps li {
+  margin-bottom: 15px;
+  padding: 12px 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  line-height: 1.6;
+  font-size: 15px;
+  border-left: 4px solid #007bff;
+}
+.recipe-modal-steps li {
+  border-left-color: #28a745;
+}
+@media (max-width: 468px) {
+  .recipe-modal-title {
+    font-size: 24px;
+  }
+  .recipe-modal-meta {
+    font-size: 14px;
+  }
+  .recipe-modal-cover {
+    height: 200px;
+  }
+  .recipe-modal-favorite {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+  .recipe-modal-edit {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.loading {
+  text-align: center;
+  padding: 50px;
+  color: #666;
+  font-size: 18px;
+}
+
+.recipe-add-menu-btn {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  background: #0784ff;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 30px;
+  font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  z-index: 9999;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.recipe-add-menu-btn:hover {
+  transform: translateY(-2px);
+}
+.recipe-add-menu-btn.added {
+  background: #22c55e;
+  /* 绿色 */
+  cursor: default;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+.recipe-add-menu-btn.hide {
+  transform: translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+.recipe-add-menu-btn.added:hover {
+  transform: none;
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 120px;
+  margin-top: 10px;
+  padding: 10px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(7, 132, 255, 0.85);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+  display: flex;
+  justify-content: center;
+}
+
+.toast-success {
+  background: #28a745;
+}
+
+.toast-error {
+  background: #dc3545;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 10px;
+}
+
+/* 底部导航 */
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #fff;
+  display: flex;
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px;
+  align-self: center;
+  align-items: center;
+  border-top: 1px solid #eee;
+}
+.tabbar a {
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
+  color: #999;
+  font-size: 12px;
+  padding-top: 6px;
+}
+.tabbar a.active {
+  color: #111;
+}
+.tabbar .icon {
+  font-size: 20px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.top-bar {
+  display: flex;
+  margin-bottom: 10px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+}
+.top-bar input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin: 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  min-width: 30px;
+  height: 35.5px;
+}
+.top-bar select {
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+/* 筛选区 */
+.filter {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.filter-title {
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: #666;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter-item label {
+  font-size: 14px;
+  color: #666;
+}
+.filter-count {
+  font-size: 13px;
+  color: #555;
+  background: #f5f5f5;
+  padding: 3px 10px;
+  border-radius: 6px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.filter input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin: 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  min-width: 30px;
+  height: 35.5px;
+}
+.filter select {
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+/* 匹配模式按钮 */
+.match-mode-switch {
+  display: flex;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.match-mode-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  background: #eee;
+}
+.match-mode-option.active {
+  background: #0784ff;
+  color: white;
+}
+
+.ingredient-filter,
+.category-filter {
+  flex: 1 1 1px;
+}
+
+.ingredient-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.ingredient-box label {
+  background: #eee;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ingredient-box input[type=checkbox] {
+  display: none;
+}
+.ingredient-box input[type=checkbox]:checked + label {
+  background: #4caf50;
+  color: white;
+}
+
+.ingredient-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.ingredient-header p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.category-select {
+  padding: 4px 8px;
+}
+
+.match-mode-row {
+  width: 100%;
+  margin-top: 8px;
+  flex-basis: 100%;
+}
+
+.menu-mode-switch {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: #eee;
+}
+.mode-btn.active {
+  background: #0784ff;
+  color: white;
+}
+.mode-btn.active:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.date-picker {
+  margin-bottom: 15px;
+}
+
+/* 瀑布流日期卡片 */
+.day-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+}
+.day-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.day-recipes {
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar {
+  background: #fff;
+  border-radius: 16px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+}
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.calendar button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  background: #eee;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  text-align: center;
+}
+.calendar-weekday {
+  font-size: 12px;
+  color: #999;
+}
+.calendar-day {
+  padding: 6px 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.calendar-day:hover {
+  background: #eee;
+}
+.calendar-day.today {
+  border: 1px solid #111;
+}
+.calendar-day.selected {
+  background: #0784ff;
+  color: #fff;
+}
+.calendar-day.has-menu {
+  color: #ff5722;
+}
+.calendar-day {
+  /* &.has-menu::after {
+      content: '•';
+      display: block;
+      font-size: 10px;
+      margin-top: 2px;
+      color: #ff5722;
+  } */
+}
+
+#recipeForm {
+  display: flex;
+  flex-direction: column;
+  margin-left: 10px;
+  margin-right: 10px;
+  gap: 12px;
+  /* 所有子元素自动间距 */
+}
+#recipeForm input,
+#recipeForm textarea {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+#recipeForm h3 {
+  text-align: center;
+  margin-bottom: 5px;
+  margin-top: 5px;
+}
+
+#formTitle h2 {
+  text-align: center;
+  margin-bottom: 5px;
+  margin-top: 5px;
+}
+
+.discover-section {
+  margin-bottom: 10px;
+}
+
+.section-header {
+  border-bottom: 2px solid #eee;
+  margin-bottom: 10px;
+}
+.section-header h2 {
+  margin-bottom: 5px;
+  margin-top: 0;
+  font-size: 20px;
+}
+
+.profile-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #eee;
+}
+.profile-header h2 {
+  margin: 0 0 15px 0;
+}
+
+.avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #eee;
+  margin: 0 auto 10px;
+}
+
+.menu-item {
+  padding: 15px;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid #eee;
+  transition: all 0.3s;
+  text-decoration: none;
+  color: #333;
+  display: block;
+}
+.menu-item:hover {
+  border-color: #08f;
+  box-shadow: 0 4px 12px rgba(0, 136, 255, 0.2);
+  transform: translateX(4px);
+}
+.menu-item-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.content-page {
+  display: none;
+}
+.content-page.active {
+  display: block;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #eee;
+}
+
+.add-section {
+  display: flex;
+  margin-bottom: 20px;
+  align-items: center;
+  border-radius: 8px;
+  gap: 6px;
+}
+.add-section input,
+.add-section select {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin: 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  min-width: 30px;
+  height: 35.5px;
+}
+.add-section button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  background: #0784ff;
+  color: white;
+}
+
+.modal-box {
+  background: white;
+  text-align: center;
+  padding: 25px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+}
+.modal-box h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+.modal-box input,
+.modal-box select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.modal-box button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+.modal-actions {
+  justify-content: center;
+  /* 水平居中 */
+  display: flex;
+  gap: 20px;
+}
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active {
+  display: flex;
+}
+
+/* 无障碍隐藏文本，用于屏幕阅读器 */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/*# sourceMappingURL=style.css.map */

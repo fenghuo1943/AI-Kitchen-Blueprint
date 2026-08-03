@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>API 测试工具</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .test-box { 
+            background: white; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        button { 
+            padding: 8px 15px; 
+            margin: 5px; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+        }
+        button:hover { background: #0056b3; }
+        .result { 
+            margin-top: 10px; 
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #ddd;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+        }
+        .success { border-left-color: #28a745; }
+        .error { border-left-color: #dc3545; }
+        input { 
+            padding: 6px; 
+            margin: 5px; 
+            width: calc(100% - 20px);
+        }
+        h2 { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>菜谱系统 API 测试</h1>
+        
+        <div class="test-box">
+            <h2>GET 测试</h2>
+            <button onclick="testGetCategories()">获取分类列表</button>
+            <button onclick="testGetIngredients()">获取食材列表</button>
+            <button onclick="testGetIngCategories()">获取食材分类</button>
+            <div id="getResult" class="result"></div>
+        </div>
+        
+        <div class="test-box">
+            <h2>POST 测试 - 添加分类</h2>
+            <input id="catName" placeholder="输入分类名称" value="测试分类">
+            <button onclick="testAddCategory()">添加分类</button>
+            <div id="postCatResult" class="result"></div>
+        </div>
+        
+        <div class="test-box">
+            <h2>POST 测试 - 添加食材</h2>
+            <input id="ingName" placeholder="输入食材名称" value="测试食材">
+            <button onclick="testAddIngredient()">添加食材</button>
+            <div id="postIngResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function showResult(elementId, data, isError = false) {
+            let el = document.getElementById(elementId);
+            el.textContent = JSON.stringify(data, null, 2);
+            el.className = 'result ' + (isError ? 'error' : 'success');
+        }
+
+        async function testGetCategories() {
+            try {
+                let res = await fetch('/cook/api_list.php?type=categories');
+                let text = await res.text();
+                console.log('Response:', text);
+                let data = JSON.parse(text);
+                showResult('getResult', data, !data.success);
+            } catch (e) {
+                showResult('getResult', { error: e.message }, true);
+            }
+        }
+
+        async function testGetIngredients() {
+            try {
+                let res = await fetch('/cook/api_list.php?type=ingredients');
+                let text = await res.text();
+                console.log('Response:', text);
+                let data = JSON.parse(text);
+                showResult('getResult', data, !data.success);
+            } catch (e) {
+                showResult('getResult', { error: e.message }, true);
+            }
+        }
+
+        async function testGetIngCategories() {
+            try {
+                let res = await fetch('/cook/api_list.php?type=ingredient_categories');
+                let text = await res.text();
+                console.log('Response:', text);
+                let data = JSON.parse(text);
+                showResult('getResult', data, !data.success);
+            } catch (e) {
+                showResult('getResult', { error: e.message }, true);
+            }
+        }
+
+        async function testAddCategory() {
+            try {
+                let name = document.getElementById('catName').value.trim();
+                if (!name) return alert('请输入分类名称');
+                
+                let res = await fetch('/cook/api_add.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'type=category&name=' + encodeURIComponent(name)
+                });
+                let text = await res.text();
+                console.log('Response:', text);
+                let data = JSON.parse(text);
+                showResult('postCatResult', data, !data.success);
+            } catch (e) {
+                showResult('postCatResult', { error: e.message }, true);
+            }
+        }
+
+        async function testAddIngredient() {
+            try {
+                let name = document.getElementById('ingName').value.trim();
+                if (!name) return alert('请输入食材名称');
+                
+                let res = await fetch('/cook/api_add.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'type=ingredient&name=' + encodeURIComponent(name)
+                });
+                let text = await res.text();
+                console.log('Response:', text);
+                let data = JSON.parse(text);
+                showResult('postIngResult', data, !data.success);
+            } catch (e) {
+                showResult('postIngResult', { error: e.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>
