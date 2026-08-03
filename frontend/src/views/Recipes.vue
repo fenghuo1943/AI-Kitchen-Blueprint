@@ -116,16 +116,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onActivated, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import RecipeCard from '../components/RecipeCard.vue';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
 import { recipeApi, categoryApi, ingredientApi, favoriteApi, getHouseholdId } from '../services/api';
+import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
 import type { Recipe, Category, Ingredient } from '../types';
 
+defineOptions({ name: 'Recipes' }); // 供 KeepAlive include 精确匹配
+
 const router = useRouter();
 const route = useRoute();
+const appStore = useAppStore();
+
+// 已展示列表对应的数据版本：返回页面时若 recipeVersion 未变则跳过刷新
+let loadedVersion = -1;
 
 const recipes = ref<Recipe[]>([]);
 const total = ref(0);
@@ -289,6 +296,7 @@ onMounted(async () => {
   if (q) {
     searchInput.value = q;
   }
+  loadedVersion = appStore.recipeVersion;
   loadRecipes();
   try {
     const [rc, ic, ings] = await Promise.all([
@@ -302,6 +310,22 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load filters:', e);
   }
+});
+
+// 组件被 KeepAlive 缓存，从详情页返回时重新激活：
+// 数据未变（recipeVersion 相同）则不刷新，保留筛选与列表；菜谱有增删改才重新拉取
+onActivated(() => {
+  if (loadedVersion !== appStore.recipeVersion) {
+    loadedVersion = appStore.recipeVersion;
+    loadRecipes();
+  }
+});
+
+// 缓存期间从首页搜索跳转（/recipes?q=xxx）时更新关键词并刷新
+watch(() => route.query.q, (q) => {
+  searchInput.value = (q as string) || '';
+  page.value = 1;
+  loadRecipes();
 });
 </script>
 

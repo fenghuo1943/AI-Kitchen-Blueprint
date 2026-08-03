@@ -123,11 +123,13 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
 import { recipeApi, recommendationApi, favoriteApi, getHouseholdId } from '../services/api';
+import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
 import type { Recipe } from '../types';
 
 const route = useRoute();
 const router = useRouter();
+const appStore = useAppStore();
 
 const recipe = ref<Recipe | null>(null);
 const coverageInput = ref('');
@@ -147,6 +149,7 @@ async function publishRecipe() {
   if (!recipe.value) return;
   try {
     await recipeApi.publish(recipe.value.id);
+    appStore.bumpRecipeVersion(); // 状态变化，通知缓存的菜谱库列表需要刷新
     toast('已发布');
     loadRecipe();
   } catch (error) {

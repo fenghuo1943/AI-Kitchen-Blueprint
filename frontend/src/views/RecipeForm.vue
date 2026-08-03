@@ -163,11 +163,13 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { recipeApi, ingredientApi, seasoningApi, categoryApi } from '../services/api';
+import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
 import type { Category, Ingredient, Seasoning, Recipe } from '../types';
 
 const route = useRoute();
 const router = useRouter();
+const appStore = useAppStore();
 const isEdit = computed(() => !!route.params.id);
 
 const form = ref({
@@ -303,10 +305,12 @@ async function save() {
     };
     if (isEdit.value) {
       await recipeApi.update(route.params.id as string, payload);
+      appStore.bumpRecipeVersion(); // 通知缓存的菜谱库列表需要刷新
       toast('保存成功');
       router.push(`/recipes/${route.params.id}`);
     } else {
       const recipe = await recipeApi.create(payload);
+      appStore.bumpRecipeVersion(); // 通知缓存的菜谱库列表需要刷新
       toast('创建成功');
       router.push(`/recipes/${recipe.id}`);
     }

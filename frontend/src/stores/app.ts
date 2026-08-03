@@ -12,6 +12,13 @@ export const useAppStore = defineStore('app', () => {
   // 错误信息
   const error = ref<string | null>(null);
 
+  // 菜谱数据版本：菜谱增删改后递增，供缓存的菜谱库页面判断返回时是否需要重新拉取
+  const recipeVersion = ref(0);
+
+  function bumpRecipeVersion() {
+    recipeVersion.value += 1;
+  }
+
   // 设置当前家庭
   function setHousehold(id: string) {
     currentHouseholdId.value = id;
@@ -35,6 +42,8 @@ export const useAppStore = defineStore('app', () => {
     currentHouseholdId,
     loading,
     error,
+    recipeVersion,
+    bumpRecipeVersion,
     setHousehold,
     init,
     clearError
