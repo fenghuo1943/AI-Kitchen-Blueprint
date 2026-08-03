@@ -28,18 +28,18 @@
       </div>
 
       <div class="filter-row">
-        <select v-model="sort" @change="loadRecipes" class="filter-select">
+        <select v-model="sort" @change="scheduleLoad()" class="filter-select">
           <option value="score">综合推荐</option>
           <option value="date">最新添加</option>
           <option value="cook">做过次数</option>
           <option value="random">随机推荐</option>
           <option value="title">名称排序</option>
         </select>
-        <select v-model="categoryId" @change="loadRecipes" class="filter-select">
+        <select v-model="categoryId" @change="scheduleLoad()" class="filter-select">
           <option value="">全部分类</option>
           <option v-for="c in recipeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
-        <select v-model="status" @change="loadRecipes" class="filter-select">
+        <select v-model="status" @change="scheduleLoad()" class="filter-select">
           <option value="">全部状态</option>
           <option value="draft">草稿</option>
           <option value="published">已发布</option>
@@ -58,15 +58,21 @@
     </div>
 
     <!-- 菜谱列表 -->
-    <div class="recipe-grid" v-if="recipes.length > 0">
-      <RecipeCard
-        v-for="recipe in recipes"
-        :key="recipe.id"
-        :recipe="recipe"
-        @favorite="toggleFavorite"
-        @menu="openAddMenu"
-      />
+    <div v-if="loading && !recipes.length" class="loading-state">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>加载中...</p>
     </div>
+    <template v-else-if="recipes.length > 0">
+      <div class="recipe-grid">
+        <RecipeCard
+          v-for="recipe in recipes"
+          :key="recipe.id"
+          :recipe="recipe"
+          @favorite="toggleFavorite"
+          @menu="openAddMenu"
+        />
+      </div>
+    </template>
     <div v-else class="empty-state">
       <p>📭 暂无菜谱</p>
       <button @click="goCreate" class="btn btn-primary">添加第一个菜谱</button>
@@ -126,6 +132,10 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 
+// 加载状态：请求进行中且列表为空时显示「加载中」，而非「暂无菜谱」
+const loading = ref(false);
+let loadSeq = 0; // 请求序号，用于忽略过期的慢响应
+
 const searchInput = ref('');
 const status = ref('');
 const sort = ref('score');
@@ -162,9 +172,16 @@ function debouncedSearch() {
   }, 400);
 }
 
+// 筛选类变更统一走防抖，减少菜谱刷新频率（分类/排序/状态/食材）
+let reloadTimer: ReturnType<typeof setTimeout>;
+function scheduleLoad(delay = 300) {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(loadRecipes, delay);
+}
+
 function setMatch(m: 'exact' | 'any') {
   match.value = m;
-  loadRecipes();
+  scheduleLoad();
 }
 
 function isSelected(id: string) {
@@ -175,12 +192,12 @@ function toggleIngredient(ing: Ingredient) {
   const idx = selectedIngredients.value.findIndex(i => i.id === ing.id);
   if (idx >= 0) selectedIngredients.value.splice(idx, 1);
   else selectedIngredients.value.push({ id: ing.id, name: ing.canonical_name });
-  loadRecipes();
+  scheduleLoad();
 }
 
 function removeIngredient(id: string) {
   selectedIngredients.value = selectedIngredients.value.filter(i => i.id !== id);
-  loadRecipes();
+  scheduleLoad();
 }
 
 function openIngredientModal() {
@@ -201,6 +218,8 @@ function clearFilters() {
 }
 
 async function loadRecipes() {
+  const seq = ++loadSeq;
+  loading.value = true;
   try {
     const response = await recipeApi.list({
       query: searchInput.value || undefined,
@@ -213,10 +232,13 @@ async function loadRecipes() {
       page: page.value,
       page_size: pageSize
     });
+    if (seq !== loadSeq) return; // 忽略过期响应
     recipes.value = response.data;
     total.value = response.total;
   } catch (error) {
-    console.error('Failed to load recipes:', error);
+    if (seq === loadSeq) console.error('Failed to load recipes:', error);
+  } finally {
+    if (seq === loadSeq) loading.value = false;
   }
 }
 
@@ -338,6 +360,16 @@ onMounted(async () => {
 
 .empty-state { text-align: center; padding: 60px 20px; color: #888; }
 .empty-state p { font-size: 1.2rem; margin-bottom: 20px; }
+
+.loading-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 20px; color: #888;
+}
+.spinner {
+  width: 32px; height: 32px; border: 3px solid #e0e0e0; border-top-color: #4a90d9;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; }
 .pagination button { min-height: 44px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; }
