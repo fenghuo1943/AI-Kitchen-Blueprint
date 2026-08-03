@@ -27,7 +27,7 @@ def get_engine():
             max_overflow=10,
             pool_pre_ping=True,
             pool_recycle=3600,
-            echo=settings.APP_DEBUG,
+            echo=settings.SQL_ECHO,
         )
         if not is_sqlite:
             if "?" in DATABASE_URL:

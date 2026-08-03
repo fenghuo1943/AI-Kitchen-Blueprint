@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = "Wzcx131130_"
     DB_NAME: str = "cook"
     DATABASE_URL: str = ""
+    # 是否打印 SQLAlchemy 执行的 SQL（调试 SQL 时开启）
+    SQL_ECHO: bool = False
 
     # LLM 配置
     LLM_PROVIDER: str = "ollama"
