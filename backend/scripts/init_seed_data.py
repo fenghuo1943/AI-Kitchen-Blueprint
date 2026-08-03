@@ -10,7 +10,7 @@ import json
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.db.database import SessionLocal, init_db
+from app.db.database import get_session_local, init_db
 from app.db.models import (
     Household, Ingredient, IngredientAlias, Tag,
     Recipe, RecipeSource, RecipeIngredient, RecipeStep, RecipeTag
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     print("开始初始化数据库...")
     init_db()
     print("数据库表创建完成，开始插入种子数据...")
-    db = SessionLocal()
+    db = get_session_local()()
     try:
         seed_data(db)
     finally:

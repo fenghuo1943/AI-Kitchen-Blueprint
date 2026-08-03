@@ -5,7 +5,6 @@ from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
 from typing import Generator, Optional
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +46,6 @@ def get_session_local():
     if _SessionLocal is None:
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
     return _SessionLocal
-
-
-# 为了向后兼容，暴露 engine 和 SessionLocal
-@property
-def engine():
-    return get_engine()
-
-
-@property
-def SessionLocal():
-    return get_session_local()
 
 
 class Base(DeclarativeBase):

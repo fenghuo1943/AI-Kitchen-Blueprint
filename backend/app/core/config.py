@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # 数据库配置 (MariaDB)
-    DB_HOST: str = "198.168.31.146"
+    DB_HOST: str = "192.168.31.146"
     DB_PORT: int = 3307
     DB_USER: str = "cook"
     DB_PASSWORD: str = "Wzcx131130_"
