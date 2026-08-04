@@ -481,3 +481,67 @@ class RecipeRepository:
         self.db.commit()
         self.db.refresh(recipe)
         return recipe
+
+    # ---- RAG 索引数据装配 ----
+
+    def get_full_for_index(self, recipe_id: str) -> Optional[dict]:
+        """装配全量菜谱数据供 RAG 切块（含来源 URL）。
+
+        返回普通 dict（非 ORM/Pydantic），供 chunking 消费；
+        不在 rag 层复用 RecipeService._to_response，避免循环依赖。
+        """
+        recipe = self.db.query(Recipe).filter(Recipe.id == recipe_id).first()
+        if not recipe:
+            return None
+
+        ing_rows = self.db.query(RecipeIngredient, Ingredient.canonical_name).join(
+            Ingredient, Ingredient.id == RecipeIngredient.ingredient_id
+        ).filter(RecipeIngredient.recipe_id == recipe_id).order_by(
+            RecipeIngredient.sort_order
+        ).all()
+        step_rows = self.db.query(RecipeStep).filter(
+            RecipeStep.recipe_id == recipe_id
+        ).order_by(RecipeStep.step_no).all()
+        tags = [t.name for t in self.get_tags(recipe_id)]
+        categories = [c.name for c in self.get_categories(recipe_id)]
+        seasonings = [s["seasoning_name"] for s in self.get_seasonings_detail(recipe_id)]
+
+        return {
+            "recipe_id": recipe.id,
+            "title": recipe.title,
+            "summary": recipe.summary,
+            "cover": recipe.cover,
+            "servings": recipe.servings,
+            "prep_minutes": recipe.prep_minutes,
+            "cook_minutes": recipe.cook_minutes,
+            "difficulty": recipe.difficulty,
+            "status": recipe.status,
+            "revision": recipe.revision,
+            "deleted_at": recipe.deleted_at,
+            "source_url": recipe.source.source_url if recipe.source else None,
+            "tags": tags,
+            "categories": categories,
+            "seasonings": seasonings,
+            "ingredients": [
+                {
+                    "canonical_name": name,
+                    "quantity": ri.quantity,
+                    "unit": ri.unit,
+                    "raw_quantity": ri.raw_quantity,
+                    "preparation": ri.preparation,
+                }
+                for ri, name in ing_rows
+            ],
+            "steps": [
+                {"step_no": s.step_no, "instruction": s.instruction}
+                for s in step_rows
+            ],
+        }
+
+    def list_published_ids(self) -> List[str]:
+        """所有 published 且未软删的菜谱 ID（全量重建用）。"""
+        rows = self.db.query(Recipe.id).filter(
+            Recipe.status == "published",
+            Recipe.deleted_at.is_(None),
+        ).all()
+        return [r[0] for r in rows]

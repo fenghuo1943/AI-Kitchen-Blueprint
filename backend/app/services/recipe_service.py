@@ -7,6 +7,7 @@ from app.core.pinyin import to_pinyin
 from app.db.models import Recipe, RecipeIngredient, RecipeStep
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
+from app.tasks.executor import enqueue_index, enqueue_delete
 from app.schemas.recipe import (
     RecipeCreate, RecipeUpdate, RecipeResponse,
     RecipeListResponse, RecipeIngredientResponse, RecipeStepResponse,
@@ -160,21 +161,35 @@ class RecipeService:
                 self.recipe_repository.add_seasoning(recipe_id, s["seasoning_id"], s.get("quantity"))
 
         recipe = self.recipe_repository.get_by_id(recipe_id)
+        # PATCH 可直接改 status：转 published 建索引，转 archived 清索引
+        if recipe.status == "published":
+            enqueue_index(recipe_id)
+        elif recipe.status == "archived":
+            enqueue_delete(recipe_id)
         return self._to_response(recipe)
 
     def delete_recipe(self, recipe_id: str) -> bool:
         """删除菜谱（软删除，进入回收站）"""
-        return self.recipe_repository.soft_delete(recipe_id)
+        ok = self.recipe_repository.soft_delete(recipe_id)
+        if ok:
+            enqueue_delete(recipe_id)
+        return ok
 
     def hard_delete_recipe(self, recipe_id: str) -> bool:
         """彻底删除菜谱（回收站内，级联清理）"""
-        return self.recipe_repository.hard_delete(recipe_id)
+        ok = self.recipe_repository.hard_delete(recipe_id)
+        if ok:
+            enqueue_delete(recipe_id)
+        return ok
 
     def restore_recipe(self, recipe_id: str) -> Optional[RecipeResponse]:
         """恢复软删除的菜谱"""
         recipe = self.recipe_repository.restore(recipe_id)
         if not recipe:
             return None
+        # 恢复后若为已发布状态则重新入索引（软删时索引已被清）
+        if recipe.status == "published":
+            enqueue_index(recipe_id)
         return self._to_response(recipe)
 
     def publish_recipe(self, recipe_id: str) -> Optional[RecipeResponse]:
@@ -182,6 +197,7 @@ class RecipeService:
         recipe = self.recipe_repository.publish_recipe(recipe_id)
         if not recipe:
             return None
+        enqueue_index(recipe_id)
         return self._to_response(recipe)
 
     def _save_relations(self, recipe_id: str, ingredients, steps, tags,

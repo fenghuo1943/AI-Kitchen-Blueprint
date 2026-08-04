@@ -33,6 +33,21 @@ class Settings(BaseSettings):
     # RAG 配置
     VECTOR_STORE_TYPE: str = "chroma"
     VECTOR_STORE_PATH: str = "./data/chroma"
+    CHROMA_COLLECTION: str = "recipes"          # Chroma collection 名
+    CHROMA_SPACE: str = "cosine"                # 距离度量（bge-m3 用余弦）
+    EMBEDDING_MODEL: str = "bge-m3"             # Ollama 嵌入模型（dims=1024）
+    # 用 127.0.0.1 而非 localhost：Windows 上 localhost 可能优先解析到 IPv6(::1)，
+    # 而 Ollama 只监听 IPv4，会导致连接被重置/503
+    EMBEDDING_BASE_URL: str = "http://127.0.0.1:11434"
+    EMBEDDING_BATCH_SIZE: int = 16              # 一次 /api/embed 最多几条
+    EMBEDDING_TIMEOUT: int = 60                 # 嵌入请求超时（秒）
+
+    # 检索默认值
+    RECALL_TOP_K: int = 20      # 向量召回上限（RAG 规范默认 Top20）
+    RERANK_TOP_K: int = 10      # 重排输出上限（RAG 规范默认 Top5~10）
+
+    # 后台索引
+    INDEX_MAX_WORKERS: int = 2  # 后台线程池大小
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

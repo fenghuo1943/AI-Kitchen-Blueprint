@@ -133,3 +133,51 @@ def sample_recipe(db_session, sample_ingredient):
     db_session.commit()
 
     return recipe
+
+
+# ============================================================
+# RAG 测试 fixtures
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def no_background_indexing(monkeypatch):
+    """默认屏蔽 recipe_service 的后台索引钩子，避免现有测试触发真实 Chroma/Ollama。"""
+    import app.services.recipe_service as rs
+
+    def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(rs, "enqueue_index", _noop)
+    monkeypatch.setattr(rs, "enqueue_delete", _noop)
+
+
+@pytest.fixture
+def sync_tasks(monkeypatch):
+    """后台任务同步执行，便于断言（rag 测试用）。"""
+    import app.tasks.executor as ex
+    monkeypatch.setattr(ex, "SYNC", True)
+    yield ex
+
+
+@pytest.fixture
+def rag_store(tmp_path):
+    """临时目录隔离的 Chroma store（不触碰真实 data/chroma）。"""
+    from app.rag.vector_store import ChromaStore
+    store = ChromaStore(path=str(tmp_path / "chroma"))
+    store._ensure()
+    store.clear()
+    yield store
+
+
+@pytest.fixture
+def rag_engine(monkeypatch, rag_store):
+    """将 indexer/retriever 默认使用的 store/embedding 替换为临时实现。"""
+    import app.rag.indexer as idx
+    import app.rag.retriever as ret
+    from tests.rag_helpers import FakeEmbedder
+    fake = FakeEmbedder()
+    monkeypatch.setattr(idx, "ChromaStore", lambda: rag_store)
+    monkeypatch.setattr(idx, "OllamaEmbeddingClient", lambda: fake)
+    monkeypatch.setattr(ret, "ChromaStore", lambda: rag_store)
+    monkeypatch.setattr(ret, "OllamaEmbeddingClient", lambda: fake)
+    return rag_store

@@ -21,6 +21,7 @@ from app.api.favorites import router as favorites_router
 from app.api.history import router as history_router
 from app.api.menu import router as menu_router
 from app.api.discover import router as discover_router
+from app.api.rag import router as rag_router
 
 # 配置日志
 logger = setup_logging()
@@ -40,6 +41,9 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("应用关闭中...")
+    # 释放后台索引线程池
+    from app.tasks.executor import shutdown as shutdown_tasks
+    shutdown_tasks()
 
 
 app = FastAPI(
@@ -70,6 +74,7 @@ app.include_router(favorites_router, prefix="/api/v1")
 app.include_router(history_router, prefix="/api/v1")
 app.include_router(menu_router, prefix="/api/v1")
 app.include_router(discover_router, prefix="/api/v1")
+app.include_router(rag_router, prefix="/api/v1")
 
 
 @app.get("/health")
