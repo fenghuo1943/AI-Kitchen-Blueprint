@@ -18,7 +18,9 @@ import type {
   WaterfallResponse,
   DiscoverRecipe,
   DiscoverType,
-  RecipeInput
+  RecipeInput,
+  IndexStatus,
+  RagSearchResponse
 } from '../types';
 
 const api = axios.create({
@@ -227,6 +229,29 @@ export const menuApi = {
 export const discoverApi = {
   get: (params: { type: DiscoverType; household_id?: string; limit?: number }) =>
     api.get<any, { list: DiscoverRecipe[] }>('/discover', { params })
+};
+
+// RAG 语义检索 API
+export const ragApi = {
+  search: (data: {
+    query: string;
+    top_k?: number;
+    max_cook_time?: number;
+    tags?: string[];
+    ingredient_ids?: string[];
+    category_id?: string;
+    household_id?: string;
+  }) =>
+    api.post<any, RagSearchResponse>('/rag/search', data),
+
+  status: () =>
+    api.get<any, IndexStatus>('/rag/index/status'),
+
+  rebuild: () =>
+    api.post<any, { status: string; task: string }>('/rag/index/rebuild'),
+
+  indexRecipe: (recipeId: string) =>
+    api.post<any, { status: string; recipe_id: string }>(`/rag/index/${recipeId}`)
 };
 
 // 入库 API

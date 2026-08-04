@@ -276,6 +276,43 @@ export interface DiscoverRecipe {
   cooked_count: number;
 }
 
+// RAG 语义检索相关
+export interface RagChunk {
+  chunk_type: string;
+  text: string;
+  vector_score: number;
+}
+
+export interface RagSearchItem {
+  recipe_id: string;
+  title: string;
+  cover?: string;
+  summary?: string;
+  score: number;
+  matched_ingredients: string[];
+  reasons: string[];
+  chunks: RagChunk[];
+}
+
+export interface RagSearchResponse {
+  results: RagSearchItem[];
+  total: number;
+  engine_available: boolean;
+  took_ms: number;
+  error?: string;
+}
+
+export interface IndexStatus {
+  indexed_count: number;
+  published_count: number;
+  last_rebuild_at?: string;
+  running: string[];
+  queued: string[];
+  failed: number;
+  last_error: Record<string, string>;
+  breakdown_by_type: Record<string, number>;
+}
+
 // API 响应
 export interface PaginatedResponse<T> {
   data: T[];

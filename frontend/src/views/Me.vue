@@ -49,6 +49,11 @@
         <span class="menu-label">智能推荐</span>
         <span class="menu-arrow">›</span>
       </router-link>
+      <router-link to="/rag" class="menu-item">
+        <span class="menu-icon">🤖</span>
+        <span class="menu-label">AI 语义检索</span>
+        <span class="menu-arrow">›</span>
+      </router-link>
     </div>
   </div>
 </template>

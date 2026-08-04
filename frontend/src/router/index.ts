@@ -89,6 +89,12 @@ const router = createRouter({
       meta: { title: '智能推荐' }
     },
     {
+      path: '/rag',
+      name: 'rag',
+      component: () => import('../views/Rag.vue'),
+      meta: { title: 'AI 语义检索' }
+    },
+    {
       path: '/ingredients',
       name: 'ingredients',
       component: () => import('../views/Ingredients.vue'),
