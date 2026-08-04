@@ -22,6 +22,7 @@ from app.api.history import router as history_router
 from app.api.menu import router as menu_router
 from app.api.discover import router as discover_router
 from app.api.rag import router as rag_router
+from app.api.ai_collection import router as ai_collection_router
 
 # 配置日志
 logger = setup_logging()
@@ -75,6 +76,7 @@ app.include_router(history_router, prefix="/api/v1")
 app.include_router(menu_router, prefix="/api/v1")
 app.include_router(discover_router, prefix="/api/v1")
 app.include_router(rag_router, prefix="/api/v1")
+app.include_router(ai_collection_router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -8,7 +8,7 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Callable, Deque, Dict, List, Optional, Set
+from typing import Callable, Dict, Optional
 
 from app.core.config import settings
 
@@ -104,6 +104,12 @@ def enqueue_rebuild() -> None:
     """全量重建（单飞：已有重建任务则忽略）。"""
     from app.rag.indexer import RecipeIndexer
     submit("rebuild", RecipeIndexer().rebuild_all)
+
+
+def enqueue_ai_collect(job_id: str) -> None:
+    """AI 采集任务（后台线程，独立 DB session）。"""
+    from app.services.ai_collection_service import AiCollectionService
+    submit(f"ai-collect:{job_id}", AiCollectionService()._collect, job_id)
 
 
 def shutdown() -> None:

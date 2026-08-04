@@ -1,7 +1,6 @@
 """数据库实体模型定义"""
 import uuid
 from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
     Column, String, Text, Integer, DateTime, Date, ForeignKey,
     UniqueConstraint, Index, text
@@ -253,11 +252,60 @@ class IngestionJob(Base, TimestampMixin):
     stage = Column(String(20), default="submitted")
     error_code = Column(String(100), nullable=True)
     result_recipe_id = Column(String(36), ForeignKey("recipes.id"), nullable=True)
+    job_type = Column(String(20), default="manual", nullable=False)  # manual|url|file|ai_search
+    request_text = Column(String(500), nullable=True)                # 用户输入（AI 采集）
+    collection_mode = Column(String(20), default="topic", nullable=False)  # topic|ingredients|complete
+    target_recipe_id = Column(String(36), ForeignKey("recipes.id"), nullable=True)  # 补全模式目标
+    max_results = Column(Integer, default=5, nullable=False)         # AI 采集页数上限
+    candidates_count = Column(Integer, default=0, nullable=False)    # AI 采集候选数
+    index_status = Column(String(20), nullable=True)
+    reason = Column(Text, nullable=True)                             # 采集说明/逐页失败原因
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 
+    # 关系
+    candidates = relationship("IngestionCandidate", back_populates="job", cascade="all, delete-orphan")
+
     __table_args__ = (
         Index("idx_ingestion_jobs_status", "status", "created_at"),
+    )
+
+
+class IngestionCandidate(Base, TimestampMixin):
+    """AI 采集候选（待审菜谱，与补全目标关联）。
+
+    候选菜谱本体存在 recipes 表（status='review'），本表记录其归属任务、
+    补全目标、去重信息与人工审核结果。
+    """
+    __tablename__ = "ingestion_candidates"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    job_id = Column(String(36), ForeignKey("ingestion_jobs.id", ondelete="CASCADE"), nullable=False)
+    recipe_id = Column(String(36), ForeignKey("recipes.id"), nullable=False)
+    source_id = Column(String(36), ForeignKey("recipe_sources.id"), nullable=True)
+    target_recipe_id = Column(String(36), ForeignKey("recipes.id"), nullable=True)
+    action = Column(String(20), default="pending", nullable=False)   # pending|approved|rejected|merged
+    merge_mode = Column(String(20), default="new", nullable=False)   # new|merge
+    dedup_key = Column(String(64), nullable=True)                    # sha256(归一标题)
+    normalized_title = Column(String(200), nullable=True)
+    core_ingredients_json = Column(Text, nullable=True)              # JSON: ["西红柿","鸡蛋"]
+    match_scores_json = Column(Text, nullable=True)                  # JSON: 与已发布/候选菜谱重叠判定
+    reason = Column(Text, nullable=True)                             # LLM 置信度/说明
+    reviewed_by = Column(String(100), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    # 关系
+    job = relationship("IngestionJob", back_populates="candidates")
+    recipe = relationship("Recipe", foreign_keys=[recipe_id])
+    target_recipe = relationship("Recipe", foreign_keys=[target_recipe_id])
+    source = relationship("RecipeSource")
+
+    __table_args__ = (
+        Index("idx_candidate_action_created", "action", "created_at"),
+        Index("idx_candidate_job", "job_id"),
+        Index("idx_candidate_recipe", "recipe_id"),
+        Index("idx_candidate_target", "target_recipe_id"),
+        Index("idx_candidate_dedup", "dedup_key"),
     )
 
 

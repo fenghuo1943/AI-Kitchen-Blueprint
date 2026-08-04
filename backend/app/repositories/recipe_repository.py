@@ -51,6 +51,9 @@ class RecipeRepository:
         conditions = [
             Recipe.deleted_at.isnot(None) if deleted else Recipe.deleted_at.is_(None)
         ]
+        # 默认列表不展示 review（AI 采集待审候选），确认入库（published）后才出现在菜谱库
+        if status is None:
+            conditions.append(Recipe.status != "review")
 
         # 关键词：title / summary / 拼音前缀 / 分类名 / 食材名
         if query:
@@ -120,20 +123,12 @@ class RecipeRepository:
         # ---- 用户相关子查询（收藏/做过次数/今日菜单）----
         cooked_count_sub = None
         is_fav_sub = None
-        today_menu_sub = None
         if household_id:
             cooked_count_sub = select(func.count(MealPlan.id)).where(
                 and_(MealPlan.recipe_id == Recipe.id, MealPlan.household_id == household_id)
             ).scalar_subquery()
             is_fav_sub = select(func.count(Favorite.id)).where(
                 and_(Favorite.recipe_id == Recipe.id, Favorite.household_id == household_id)
-            ).scalar_subquery()
-            today_menu_sub = select(func.count(MealPlan.id)).where(
-                and_(
-                    MealPlan.recipe_id == Recipe.id,
-                    MealPlan.household_id == household_id,
-                    MealPlan.target_date == date.today().isoformat(),
-                )
             ).scalar_subquery()
 
         # total_score = score + cooked_count×0.5 + 收藏×2

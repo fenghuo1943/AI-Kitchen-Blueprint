@@ -20,7 +20,11 @@ import type {
   DiscoverType,
   RecipeInput,
   IndexStatus,
-  RagSearchResponse
+  RagSearchResponse,
+  AICollectJob,
+  AICollectCandidate,
+  AICollectionCreate,
+  AICollectConfigStatus
 } from '../types';
 
 const api = axios.create({
@@ -252,6 +256,27 @@ export const ragApi = {
 
   indexRecipe: (recipeId: string) =>
     api.post<any, { status: string; recipe_id: string }>(`/rag/index/${recipeId}`)
+};
+
+// AI 采集入库 API
+export const aiCollectApi = {
+  createJob: (data: AICollectionCreate) =>
+    api.post<any, AICollectJob>('/ai-collect/jobs', data),
+
+  getJob: (jobId: string) =>
+    api.get<any, AICollectJob>(`/ai-collect/jobs/${jobId}`),
+
+  listCandidates: (params?: { page?: number; page_size?: number }) =>
+    api.get<any, PaginatedResponse<AICollectCandidate>>('/ai-collect/candidates', { params }),
+
+  approve: (candidateId: string) =>
+    api.post<any, AICollectCandidate>(`/ai-collect/candidates/${candidateId}/approve`),
+
+  reject: (candidateId: string) =>
+    api.post<any, AICollectCandidate>(`/ai-collect/candidates/${candidateId}/reject`),
+
+  configStatus: () =>
+    api.get<any, AICollectConfigStatus>('/ai-collect/config/status')
 };
 
 // 入库 API

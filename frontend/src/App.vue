@@ -21,6 +21,7 @@
         <router-link to="/inventory" @click="closeMobileMenu">库存管理</router-link>
         <router-link to="/recommend" @click="closeMobileMenu">智能推荐</router-link>
         <router-link to="/rag" @click="closeMobileMenu">AI 检索</router-link>
+        <router-link to="/ai-collect" @click="closeMobileMenu">AI 采集</router-link>
         <router-link to="/ingredients" @click="closeMobileMenu">食材管理</router-link>
       </div>
     </nav>

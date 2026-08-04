@@ -95,6 +95,12 @@ const router = createRouter({
       meta: { title: 'AI 语义检索' }
     },
     {
+      path: '/ai-collect',
+      name: 'ai-collect',
+      component: () => import('../views/AiCollection.vue'),
+      meta: { title: 'AI 采集入库' }
+    },
+    {
       path: '/ingredients',
       name: 'ingredients',
       component: () => import('../views/Ingredients.vue'),

@@ -210,6 +210,49 @@ export interface IngestionJob {
   updated_at: string;
 }
 
+// AI 采集入库相关
+export interface AICollectCandidate {
+  id: string;
+  job_id: string;
+  recipe: Recipe | null;
+  action: string;
+  merge_mode: string;
+  source_url?: string;
+  normalized_title?: string;
+  core_ingredients: string[];
+  match_scores: {
+    title_duplicates?: { recipe_id: string; title: string; status?: string; score: number }[];
+    ingredient_overlaps?: { recipe_id: string; title: string; status?: string; overlap: number }[];
+  };
+  reason?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  created_at: string;
+}
+
+export interface AICollectJob extends IngestionJob {
+  request_text?: string;
+  collection_mode: string;
+  target_recipe_id?: string;
+  candidates_count: number;
+  reason?: string;
+  candidates: AICollectCandidate[];
+}
+
+export interface AICollectionCreate {
+  request_text: string;
+  mode: 'topic' | 'ingredients' | 'complete';
+  target_recipe_id?: string;
+  max_results?: number;
+}
+
+export interface AICollectConfigStatus {
+  tavily_configured: boolean;
+  llm_provider: string;
+  llm_configured: boolean;
+  llm_health: Record<string, any>;
+}
+
 // 收藏相关
 export interface FavoriteItem {
   id: string;

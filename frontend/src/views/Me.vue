@@ -54,6 +54,11 @@
         <span class="menu-label">AI 语义检索</span>
         <span class="menu-arrow">›</span>
       </router-link>
+      <router-link to="/ai-collect" class="menu-item">
+        <span class="menu-icon">🕸</span>
+        <span class="menu-label">AI 采集入库</span>
+        <span class="menu-arrow">›</span>
+      </router-link>
     </div>
   </div>
 </template>

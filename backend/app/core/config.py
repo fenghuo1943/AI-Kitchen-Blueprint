@@ -30,6 +30,23 @@ class Settings(BaseSettings):
     LLM_API_KEY: Optional[str] = None
     LLM_BASE_URL: str = "http://localhost:11434"
 
+    # LLM 生成（AI 采集摘要用）
+    LLM_MAX_TOKENS: int = 4000          # 结构化抽取单次输出上限
+    LLM_TEMPERATURE: float = 0.2        # 抽取类任务低温度，提高稳定性
+    LLM_TIMEOUT: int = 120              # LLM 生成请求超时（秒）
+    # 注意：不用 ANTHROPIC_MODEL 这个名字，避免与外壳/工具链的 ANTHROPIC_MODEL 环境变量冲突
+    ANTHROPIC_LLM_MODEL: str = "claude-opus-5"  # 可选商业供应商默认模型
+
+    # 联网搜索（Tavily）
+    TAVILY_API_KEY: Optional[str] = None
+    TAVILY_BASE_URL: str = "https://api.tavily.com"
+    TAVILY_TIMEOUT: int = 30
+
+    # AI 采集限制
+    AI_COLLECT_MAX_PAGES: int = 5       # 单任务最多采集页数
+    AI_COLLECT_PAGE_CHARS: int = 8000   # 单页喂给 LLM 的字符上限（截断）
+    AI_COLLECT_CONCURRENCY: int = 1     # 本地小模型串行，避免压垮 Ollama
+
     # RAG 配置
     VECTOR_STORE_TYPE: str = "chroma"
     VECTOR_STORE_PATH: str = "./data/chroma"
