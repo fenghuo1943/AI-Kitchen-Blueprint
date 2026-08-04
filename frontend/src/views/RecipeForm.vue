@@ -182,7 +182,7 @@ const form = ref({
   difficulty: '',
   status: 'draft',
   category_ids: [] as string[],
-  ingredients: [] as { ingredient_id: string; quantity: string; unit: string; preparation?: string }[],
+  ingredients: [] as { ingredient_id: string; ingredient_name?: string; quantity: string; unit: string; preparation?: string }[],
   seasonings: [] as { seasoning_id: string; quantity: string }[],
   steps: [] as { instruction: string; duration_minutes?: number }[]
 });
@@ -218,7 +218,10 @@ function isIngPicked(id: string) { return form.value.ingredients.some(i => i.ing
 function isSeaPicked(id: string) { return form.value.seasonings.some(s => s.seasoning_id === id); }
 
 function ingName(id: string) {
-  return allIngredients.value.find(i => i.id === id)?.canonical_name || id;
+  // 优先用菜谱接口带回的食材名（对第 100 个之后的食材、AI 采集新食材等不在下拉列表里的也有效）
+  return form.value.ingredients.find(i => i.ingredient_id === id)?.ingredient_name
+    || allIngredients.value.find(i => i.id === id)?.canonical_name
+    || id;
 }
 function seaName(id: string) {
   return allSeasonings.value.find(s => s.id === id)?.canonical_name || id;
@@ -228,7 +231,7 @@ function pickIngredient(ing: Ingredient) {
   if (isIngPicked(ing.id)) {
     form.value.ingredients = form.value.ingredients.filter(i => i.ingredient_id !== ing.id);
   } else {
-    form.value.ingredients.push({ ingredient_id: ing.id, quantity: '', unit: '' });
+    form.value.ingredients.push({ ingredient_id: ing.id, ingredient_name: ing.canonical_name, quantity: '', unit: '' });
   }
 }
 function pickSeasoning(sea: Seasoning) {
@@ -248,7 +251,7 @@ async function loadData() {
     const [rc, ic, ings, seas] = await Promise.all([
       categoryApi.list('recipe'),
       categoryApi.list('ingredient'),
-      ingredientApi.list({ page: 1, page_size: 200 }),
+      ingredientApi.list({ page: 1, page_size: 100 }),
       seasoningApi.getAll()
     ]);
     recipeCategories.value = rc.data;
@@ -271,7 +274,8 @@ async function loadData() {
     form.value.status = recipe.status;
     form.value.category_ids = recipe.categories.map(c => c.id);
     form.value.ingredients = recipe.ingredients.map(i => ({
-      ingredient_id: i.ingredient_id, quantity: i.quantity || '', unit: i.unit || ''
+      ingredient_id: i.ingredient_id, ingredient_name: i.ingredient_name,
+      quantity: i.quantity || '', unit: i.unit || ''
     }));
     form.value.seasonings = recipe.seasonings.map(s => ({ seasoning_id: s.seasoning_id, quantity: s.quantity || '' }));
     form.value.steps = recipe.steps.map(s => ({ instruction: s.instruction, duration_minutes: s.duration_minutes }));
