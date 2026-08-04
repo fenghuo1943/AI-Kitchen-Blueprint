@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "http://localhost:11434"
 
     # LLM 生成（AI 采集摘要用）
-    LLM_MAX_TOKENS: int = 4000          # 结构化抽取单次输出上限
+    # 上限需覆盖推理类模型开销：DeepSeek v4 等在 max_tokens 内先消费数千推理 token，
+    # 4000 太小会导致 JSON 输出被截断（非法 JSON / 空内容），故默认 8000。
+    LLM_MAX_TOKENS: int = 8000          # 结构化抽取单次输出上限（含推理 token）
     LLM_TEMPERATURE: float = 0.2        # 抽取类任务低温度，提高稳定性
     LLM_TIMEOUT: int = 120              # LLM 生成请求超时（秒）
     # 限制上下文长度，避免大模型默认 262K 上下文导致 Ollama 内存不足（抽取只需数 K token）

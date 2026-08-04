@@ -356,6 +356,17 @@ def test_openai_compat_generate(monkeypatch):
     assert captured["payload"]["response_format"] == {"type": "json_object"}
 
 
+def test_openai_compat_max_tokens_defaults_to_settings(monkeypatch):
+    """max_tokens 未指定时走 LLM_MAX_TOKENS（推理类模型需留足输出预算）。"""
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    monkeypatch.setattr(settings, "LLM_MAX_TOKENS", 8000)
+    provider = OpenAICompatLLMProvider(api_key="k", base_url="https://x", model="m")
+    assert provider.max_tokens == 8000
+    provider2 = OpenAICompatLLMProvider(api_key="k", base_url="https://x", model="m", max_tokens=1234)
+    assert provider2.max_tokens == 1234
+
+
 def test_openai_compat_response_format_fallback(monkeypatch):
     from app.llm.openai_compat import OpenAICompatLLMProvider
 

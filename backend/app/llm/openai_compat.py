@@ -26,7 +26,7 @@ class OpenAICompatLLMProvider(LLMProvider):
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: str = "",
-        max_tokens: int = 4000,
+        max_tokens: Optional[int] = None,
         timeout: float = 120.0,
         temperature: float = 0.2,
     ):
@@ -34,7 +34,9 @@ class OpenAICompatLLMProvider(LLMProvider):
 
         self._client = httpx.Client(base_url=base_url or "", timeout=timeout)
         self.model = model or settings.LLM_MODEL
-        self.max_tokens = max_tokens
+        # 默认走配置：DeepSeek v4 等推理模型会在 max_tokens 内先消费推理 token，
+        # 固定 4000 会截断 JSON，故上限需留足推理开销（见 LLM_MAX_TOKENS）。
+        self.max_tokens = max_tokens or settings.LLM_MAX_TOKENS
         self.temperature = temperature
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
