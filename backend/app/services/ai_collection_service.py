@@ -168,15 +168,15 @@ class AiCollectionService:
             return
 
         # 多来源交叉总结：每批 ≤ AI_COLLECT_MAX_SOURCES 个来源综合成一份菜谱；
-        # 批总结失败时回退到批内逐页抽取，避免整批丢失。
+        # 批总结失败或结果校验不通过时回退到批内逐页抽取，避免整批丢失。
         for batch in self._group_pages(pages):
             batch_urls = [u for u, _ in batch]
             if len(batch) >= settings.AI_COLLECT_MIN_SOURCES:
                 try:
                     recipe = extract_recipe_from_sources(llm, batch)
                     recipe["source_url"] = batch_urls[0]
-                    self._process_extracted_recipe(db, job, recipe, batch_urls)
-                    continue
+                    if self._process_extracted_recipe(db, job, recipe, batch_urls):
+                        continue
                 except (LLMUnavailableError, LLMValidationError) as e:
                     logger.warning("多来源总结 %s 失败，回退逐页抽取: %s", batch_urls, e)
                     job.reason = (
@@ -234,18 +234,20 @@ class AiCollectionService:
     # ------------------------------------------------------------------ #
     def _process_extracted_recipe(
         self, db: Session, job: IngestionJob, recipe: dict, urls: List[str],
-    ) -> None:
-        """校验 → 去重 → 落库候选。recipe 需已通过/将过 validate_recipe 归一。"""
+    ) -> bool:
+        """校验 → 去重 → 落库候选。返回是否已处理：
+        True=已落库或已存在（去重命中）；False=校验未通过（调用方应回退逐页抽取）。"""
         if not validate_recipe(recipe):
             job.reason = (job.reason or "") + f"[{','.join(urls)}] 校验未通过\n"
-            return
+            return False
         dedup_key = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
         if AICollectionRepository(db).get_by_dedup_key(dedup_key):
-            return
+            return True
         match_scores = self._find_duplicates(db, recipe)
         self._persist_candidate(db, job, recipe, urls, dedup_key, match_scores)
         job.candidates_count += 1
         db.commit()
+        return True
 
     def _persist_candidate(
         self, db: Session, job: IngestionJob, recipe: dict,

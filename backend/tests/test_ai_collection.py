@@ -18,6 +18,7 @@ from app.db.models import (
     RecipeRevision, RecipeSource, RecipeStep,
 )
 from app.llm import LLMProvider, LLMUnavailableError, LLMValidationError
+from app.llm.factory import default_model_for
 from app.llm.prompts import (
     RecipeExtraction, extract_recipe_from_sources, extract_recipe_with_fix, normalize_title,
 )
@@ -79,6 +80,22 @@ class FakeLLM(LLMProvider):
         if self.fail_then_succeed and self.calls == 1:
             raise LLMValidationError("首次输出非法 JSON")
         return dict(self.recipe) if self.recipe else {}
+
+    def health_check(self):
+        return {"ok": True, "model_available": True, "detail": "fake"}
+
+
+class SequencedLLM(LLMProvider):
+    """按调用顺序依次返回预置响应（模拟多来源总结返回"无菜谱"后逐页成功）。"""
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = 0
+
+    def generate(self, messages, response_schema=None, timeout=None):
+        resp = self.responses[min(self.calls, len(self.responses) - 1)]
+        self.calls += 1
+        return dict(resp)
 
     def health_check(self):
         return {"ok": True, "model_available": True, "detail": "fake"}
@@ -556,6 +573,33 @@ def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_ke
     assert len(sources) == 3  # 每个来源都建了 RecipeSource，raw_hash 去重生效
 
 
+def test_collect_consolidate_no_recipe_falls_back_to_pages(db_session, no_enqueue, tavily_key):
+    """多来源总结判定"无菜谱"（输出 {title:""}，通过 Pydantic 但过不了业务校验）时，
+    必须回退逐页抽取，而不是整批丢弃。"""
+    urls = [f"https://example.com/tomato{i}" for i in range(1, 4)]
+    no_recipe = {"title": "", "ingredients": [], "steps": []}
+    llm = SequencedLLM([
+        no_recipe,  # 第 1 次：多来源总结 → 无菜谱
+        make_recipe(title="日式土豆泥沙拉", url=urls[0]),  # 逐页回退
+        make_recipe(title="彩椒炒蛋", url=urls[1]),
+    ])
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("减脂餐", u, "c", 0.9) for u in urls],
+            pages=([{"url": u, "raw_content": "做法正文"} for u in urls], []),
+        ),
+        llm=llm,
+    )
+    job = make_job(db_session, request_text="减脂餐")
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert "校验未通过" in (job.reason or "")  # 批次判定"无菜谱"被记录
+    assert llm.calls == 4                    # 1 次多来源总结 + 3 页逐页回退
+    assert job.candidates_count == 2         # 逐页回退产出候选，整批未丢
+    assert job.stage == "review"
+
+
 def test_collect_single_source_stays_single(db_session, no_enqueue, tavily_key):
     """只有 1 个可用来源时保持单来源抽取（多来源总结前置条件不满足）。"""
     url = "https://example.com/tomato"
@@ -772,7 +816,8 @@ def test_list_models(monkeypatch):
     assert "anthropic" in providers
     assert "deepseek" in providers
     assert res.default_provider == settings.LLM_PROVIDER
-    assert res.default_model == settings.LLM_MODEL
+    # 默认模型跟随供应商：LLM_PROVIDER=deepseek 时应为 DEEPSEEK_MODEL（环境敏感）
+    assert res.default_model == default_model_for(settings.LLM_PROVIDER)
 
 
 def test_list_models_no_cloud_without_key(monkeypatch):
