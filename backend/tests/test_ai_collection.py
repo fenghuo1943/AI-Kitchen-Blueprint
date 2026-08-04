@@ -325,7 +325,8 @@ def test_extract_recipe_with_fix_retries():
 # ------------------------------------------------------------------ #
 # 采集流水线
 # ------------------------------------------------------------------ #
-def test_create_job_requires_tavily(db_session, no_enqueue):
+def test_create_job_requires_tavily(db_session, no_enqueue, monkeypatch):
+    monkeypatch.setattr(settings, "TAVILY_API_KEY", None)
     with pytest.raises(ValueError) as exc:
         make_service().create_ai_job(db_session, SimpleNamespace(
             request_text="西红柿", mode="topic", target_recipe_id=None, max_results=5
@@ -553,7 +554,8 @@ def test_review_twice_raises(db_session, no_enqueue, tavily_key):
 # ------------------------------------------------------------------ #
 # API
 # ------------------------------------------------------------------ #
-def test_api_create_job_requires_key(client, no_enqueue):
+def test_api_create_job_requires_key(client, no_enqueue, monkeypatch):
+    monkeypatch.setattr(settings, "TAVILY_API_KEY", None)
     resp = client.post("/api/v1/ai-collect/jobs", json={"request_text": "西红柿"})
     assert resp.status_code == 400
     assert "TAVILY_NOT_CONFIGURED" in resp.text
@@ -575,6 +577,67 @@ def test_api_pending_empty(client, no_enqueue, tavily_key):
     resp = client.get("/api/v1/ai-collect/candidates")
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
+
+
+def test_list_models(monkeypatch):
+    from app.services.ai_collection_service import OllamaLLMProvider
+
+    monkeypatch.setattr(
+        OllamaLLMProvider, "list_models",
+        lambda self: ["qwen3.5:9b", "qwen3.5:4b", "bge-m3:latest"],
+    )
+    monkeypatch.setattr(settings, "LLM_API_KEY", "k")
+    res = make_service().list_models()
+    providers = {m.provider for m in res.models}
+    assert "ollama" in providers
+    assert "anthropic" in providers
+    assert res.default_provider == settings.LLM_PROVIDER
+    assert res.default_model == settings.LLM_MODEL
+
+
+def test_list_models_no_anthropic_without_key(monkeypatch):
+    from app.services.ai_collection_service import OllamaLLMProvider
+
+    monkeypatch.setattr(OllamaLLMProvider, "list_models", lambda self: ["qwen3.5:9b"])
+    monkeypatch.setattr(settings, "LLM_API_KEY", None)
+    res = make_service().list_models()
+    assert all(m.provider != "anthropic" for m in res.models)
+
+
+def test_build_job_llm(db_session, no_enqueue):
+    from app.llm.anthropic_provider import AnthropicLLMProvider
+    from app.llm.ollama import OllamaLLMProvider
+
+    service = make_service()
+    job = make_job(db_session)
+    job.llm_provider = "ollama"
+    job.llm_model = "qwen3.5:4b"
+    p = service._build_job_llm(job)
+    assert isinstance(p, OllamaLLMProvider)
+    assert p.model == "qwen3.5:4b"
+
+    job.llm_provider = "anthropic"
+    job.llm_model = None
+    p2 = service._build_job_llm(job)
+    assert isinstance(p2, AnthropicLLMProvider)
+    assert p2.model == settings.ANTHROPIC_LLM_MODEL
+
+
+def test_create_ai_job_stores_llm(db_session, no_enqueue, tavily_key):
+    resp = make_service().create_ai_job(db_session, SimpleNamespace(
+        request_text="西红柿", mode="topic", target_recipe_id=None, max_results=5,
+        llm_provider="ollama", llm_model="qwen3.5:4b",
+    ))
+    job = db_session.query(IngestionJob).filter_by(id=resp.id).first()
+    assert job.llm_provider == "ollama"
+    assert job.llm_model == "qwen3.5:4b"
+
+
+def test_api_list_models(client, no_enqueue, tavily_key):
+    resp = client.get("/api/v1/ai-collect/models")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "models" in body and "default_model" in body
 
 
 def test_api_approve_reject_endpoints(client, db_session, no_enqueue, tavily_key):

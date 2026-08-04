@@ -80,8 +80,8 @@ class AiCollectionService:
             target_recipe_id=data.target_recipe_id if data.mode == "complete" else None,
             max_results=min(data.max_results, settings.AI_COLLECT_MAX_PAGES),
             candidates_count=0,
-            llm_provider=data.llm_provider,
-            llm_model=data.llm_model,
+            llm_provider=getattr(data, "llm_provider", None),
+            llm_model=getattr(data, "llm_model", None),
         )
         repo = AICollectionRepository(db)
         job = repo.create_job(job)

@@ -34,6 +34,17 @@
         <p class="hint">将联网搜索「目标菜谱」的完整做法，确认后只补全缺失字段。</p>
       </div>
 
+      <div class="model-select-wrap">
+        <label class="model-label">LLM 模型</label>
+        <select v-model="selectedModelKey" class="model-select" @change="onModelChange">
+          <option value="">默认（{{ defaultModelLabel }}）</option>
+          <option v-for="m in modelOptions" :key="m.provider + ':' + m.model" :value="m.provider + ':' + m.model">
+            {{ m.label }}
+          </option>
+        </select>
+        <span class="hint">把搜索到的网页总结为结构化菜谱；选择会保存在本地。</span>
+      </div>
+
       <div class="search-bar">
         <input
           v-model="form.request_text"
@@ -154,7 +165,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { aiCollectApi, recipeApi } from '../services/api';
 import { toast } from '../composables/useToast';
-import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, Recipe } from '../types';
+import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, LLMModelOption, Recipe } from '../types';
 
 const router = useRouter();
 
@@ -165,6 +176,43 @@ const form = ref<{ mode: 'topic' | 'ingredients' | 'complete'; request_text: str
   target_recipe_id: '',
   max_results: 5
 });
+
+// ---- LLM 模型选择 ----
+const modelOptions = ref<LLMModelOption[]>([]);
+const selectedModelKey = ref('');
+const defaultModelLabel = computed(() => {
+  if (config.value) return `${config.value.llm_provider || 'ollama'}:${config.value.llm_model || ''}`;
+  return '';
+});
+
+async function loadModels() {
+  try {
+    const res = await aiCollectApi.listModels();
+    modelOptions.value = res.models;
+    // 本地已保存的选择优先，否则用默认
+    const savedProvider = localStorage.getItem('aiCollect.llmProvider');
+    const savedModel = localStorage.getItem('aiCollect.llmModel');
+    if (savedProvider && savedModel) {
+      selectedModelKey.value = `${savedProvider}:${savedModel}`;
+    } else {
+      selectedModelKey.value = '';
+    }
+  } catch (e) {
+    console.error('load llm models failed', e);
+    toast('获取模型列表失败', 'error');
+  }
+}
+
+function onModelChange() {
+  if (selectedModelKey.value) {
+    const [provider, ...rest] = selectedModelKey.value.split(':');
+    localStorage.setItem('aiCollect.llmProvider', provider);
+    localStorage.setItem('aiCollect.llmModel', rest.join(':'));
+  } else {
+    localStorage.removeItem('aiCollect.llmProvider');
+    localStorage.removeItem('aiCollect.llmModel');
+  }
+}
 
 const submitting = ref(false);
 const job = ref<AICollectJob | null>(null);
@@ -212,11 +260,21 @@ async function submit() {
   }
   submitting.value = true;
   try {
+    // 拆分已选 "provider:model"（模型名可能含冒号，只拆第一个）
+    let llmProvider: string | undefined;
+    let llmModel: string | undefined;
+    if (selectedModelKey.value) {
+      const idx = selectedModelKey.value.indexOf(':');
+      llmProvider = selectedModelKey.value.slice(0, idx);
+      llmModel = selectedModelKey.value.slice(idx + 1);
+    }
     const created = await aiCollectApi.createJob({
       request_text: text,
       mode: form.value.mode,
       target_recipe_id: form.value.mode === 'complete' ? form.value.target_recipe_id : undefined,
-      max_results: form.value.max_results
+      max_results: form.value.max_results,
+      llm_provider: llmProvider,
+      llm_model: llmModel
     });
     toast('已提交采集任务');
     startPolling(created.id);
@@ -346,6 +404,7 @@ function errorText(code?: string): string {
 
 onMounted(() => {
   loadConfig();
+  loadModels();
   loadPending();
 });
 onUnmounted(stopPolling);
@@ -378,7 +437,13 @@ onUnmounted(stopPolling);
   width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
   font-size: 14px; min-height: 44px; background: white;
 }
-.hint { font-size: 12px; color: #888; margin: 6px 0 0; }
+.model-select-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.model-label { font-size: 13px; color: #555; white-space: nowrap; }
+.model-select {
+  flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #e0e0e0;
+  border-radius: 8px; font-size: 14px; min-height: 40px; background: white;
+}
+.hint { font-size: 12px; color: #888; margin: 6px 0 0; flex-basis: 100%; }
 
 .search-bar { display: flex; gap: 10px; }
 .search-input {

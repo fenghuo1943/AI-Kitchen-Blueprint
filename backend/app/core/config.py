@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 4000          # 结构化抽取单次输出上限
     LLM_TEMPERATURE: float = 0.2        # 抽取类任务低温度，提高稳定性
     LLM_TIMEOUT: int = 120              # LLM 生成请求超时（秒）
+    # 限制上下文长度，避免大模型默认 262K 上下文导致 Ollama 内存不足（抽取只需数 K token）
+    LLM_CONTEXT_LENGTH: int = 8192
     # 注意：不用 ANTHROPIC_MODEL 这个名字，避免与外壳/工具链的 ANTHROPIC_MODEL 环境变量冲突
     ANTHROPIC_LLM_MODEL: str = "claude-opus-5"  # 可选商业供应商默认模型
 

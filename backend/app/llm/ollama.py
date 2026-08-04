@@ -37,10 +37,18 @@ class OllamaLLMProvider(LLMProvider):
             "model": self.model,
             "stream": False,
             "messages": messages,
-            "options": {"temperature": self.temperature},
+            "options": {
+                "temperature": self.temperature,
+                # 限制上下文：避免大模型默认 262K 上下文导致 Ollama 内存不足
+                "num_ctx": settings.LLM_CONTEXT_LENGTH,
+            },
+            # qwen3.5 等模型默认可能思考，结构化抽取场景关闭以减少延迟/干扰 JSON 输出
+            "think": False,
         }
         if response_schema is not None:
-            payload["format"] = response_schema.model_json_schema()
+            # 实测 qwen3.5 等模型对复杂 schema grammar 会输出空骨架；改用自由 JSON
+            #（Ollama 保证合法 JSON），配合宽容 schema + Pydantic 校验 + 归一化更稳健
+            payload["format"] = "json"
 
         try:
             resp = self._client.post("/api/chat", json=payload, timeout=timeout)
