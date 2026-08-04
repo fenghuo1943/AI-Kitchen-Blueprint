@@ -9,12 +9,15 @@ from app.schemas.recipe import RecipeResponse
 
 class AICollectionCreate(BaseModel):
     """提交 AI 采集任务"""
-    request_text: str = Field(..., min_length=1, description="菜名/主题/逗号分隔食材/补全请求")
-    mode: Literal["topic", "ingredients", "complete"] = Field("topic", description="采集模式")
+    request_text: str = Field("", description="菜名/主题/逗号分隔食材/补全请求；手动模式可为空")
+    mode: Literal["topic", "ingredients", "complete", "manual"] = Field("topic", description="采集模式")
     target_recipe_id: Optional[str] = Field(None, description="补全模式的目标菜谱 ID")
-    max_results: int = Field(5, ge=1, le=10, description="最多采集页数")
+    max_results: int = Field(15, ge=1, le=20, description="最多采集页数")
     llm_provider: Optional[str] = Field(None, description="采集用 LLM 供应商：ollama/anthropic/deepseek/openrouter/openai_compat（缺省取配置）")
     llm_model: Optional[str] = Field(None, description="采集用模型名（缺省取配置）")
+    search_sites: Optional[List[str]] = Field(None, description="限定搜索的站点域名列表，如 ['xiachufang.com']；缺省取全局配置 AI_COLLECT_SEARCH_SITES")
+    manual_url: Optional[str] = Field(None, description="手动模式：来源页面 URL（登录墙/反爬站点如小红书）")
+    manual_content: Optional[str] = Field(None, description="手动模式：用户粘贴的页面正文")
 
 
 class LLMModelOption(BaseModel):
@@ -58,6 +61,8 @@ class AICollectionJobResponse(IngestionResponse):
     reason: Optional[str] = None
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
+    search_sites: Optional[List[str]] = None
+    manual_url: Optional[str] = None
     candidates: List[CandidateResponse] = []
 
 
@@ -76,3 +81,4 @@ class ConfigStatusResponse(BaseModel):
     llm_configured: bool
     llm_model: Optional[str] = None
     llm_health: Dict = {}
+    default_search_sites: List[str] = Field(default_factory=list, description="全局默认限定搜索的域名列表")

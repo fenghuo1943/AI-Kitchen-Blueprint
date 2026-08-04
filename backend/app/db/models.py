@@ -256,12 +256,15 @@ class IngestionJob(Base, TimestampMixin):
     request_text = Column(String(500), nullable=True)                # 用户输入（AI 采集）
     collection_mode = Column(String(20), default="topic", nullable=False)  # topic|ingredients|complete
     target_recipe_id = Column(String(36), ForeignKey("recipes.id"), nullable=True)  # 补全模式目标
-    max_results = Column(Integer, default=5, nullable=False)         # AI 采集页数上限
+    max_results = Column(Integer, default=15, nullable=False)        # AI 采集页数上限
     candidates_count = Column(Integer, default=0, nullable=False)    # AI 采集候选数
     index_status = Column(String(20), nullable=True)
     reason = Column(Text, nullable=True)                             # 采集说明/逐页失败原因
     llm_provider = Column(String(20), nullable=True)                 # 采集时使用的 LLM 供应商
     llm_model = Column(String(100), nullable=True)                   # 采集时使用的模型名
+    search_domains_json = Column(Text, nullable=True)                # JSON: 本次任务限定搜索的域名列表
+    manual_url = Column(String(500), nullable=True)                  # 手动模式：来源页面 URL（登录墙/反爬站点）
+    manual_content = Column(Text, nullable=True)                     # 手动模式：用户粘贴的页面正文
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 

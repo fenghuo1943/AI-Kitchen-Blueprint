@@ -13,7 +13,8 @@ import logging
 import re
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ from app.llm.ollama import OllamaLLMProvider
 from app.llm.openai_compat import OpenAICompatLLMProvider
 from app.llm.prompts import (
     extract_recipe_from_sources, extract_recipe_with_fix,
-    normalize_title, validate_recipe,
+    normalize_title, validate_recipe_reason,
 )
 from app.repositories.ai_collection_repository import AICollectionRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -63,9 +64,23 @@ class AiCollectionService:
     # 提交任务
     # ------------------------------------------------------------------ #
     def create_ai_job(self, db: Session, data: AICollectionCreate, actor: str = "system") -> AICollectionJobResponse:
-        """创建 AI 采集任务并入队后台执行。"""
-        if not settings.TAVILY_API_KEY:
+        """创建 AI 采集任务并入队后台执行。
+
+        手动模式（manual）：跳过 Tavily 搜索，用用户粘贴的 URL+正文直接 LLM 抽取，
+        用于小红书等登录墙/反爬站点（Tavily 抓不到正文）。
+        """
+        is_manual = data.mode == "manual"
+
+        if not is_manual and not settings.TAVILY_API_KEY:
             raise ValueError("TAVILY_NOT_CONFIGURED")
+
+        if is_manual:
+            if not (data.manual_url or "").strip():
+                raise ValueError("手动模式需要提供来源 URL")
+            if not (data.manual_content or "").strip():
+                raise ValueError("手动模式需要提供粘贴的正文内容")
+        elif not (data.request_text or "").strip():
+            raise ValueError("请输入菜名/食材")
 
         if data.mode == "complete":
             if not data.target_recipe_id:
@@ -74,18 +89,25 @@ class AiCollectionService:
             if not target:
                 raise ValueError("目标菜谱不存在")
 
+        # 站点限制：任务指定优先，缺省回落全局配置 AI_COLLECT_SEARCH_SITES（手动模式不适用）
+        raw_sites = getattr(data, "search_sites", None)
+        search_sites = self._default_search_sites() if raw_sites is None else self._normalize_sites(raw_sites)
+
         job = IngestionJob(
             id=str(uuid.uuid4()),
             status="queued",
             stage="submitted",
             job_type="ai_search",
-            request_text=data.request_text,
+            request_text=data.request_text or "",
             collection_mode=data.mode,
             target_recipe_id=data.target_recipe_id if data.mode == "complete" else None,
             max_results=min(data.max_results, settings.AI_COLLECT_MAX_PAGES),
             candidates_count=0,
             llm_provider=getattr(data, "llm_provider", None),
             llm_model=getattr(data, "llm_model", None),
+            search_domains_json=json.dumps(search_sites) if search_sites else None,
+            manual_url=(data.manual_url or "").strip() if is_manual else None,
+            manual_content=data.manual_content if is_manual else None,
         )
         repo = AICollectionRepository(db)
         job = repo.create_job(job)
@@ -112,6 +134,12 @@ class AiCollectionService:
         repo = AICollectionRepository(db)
         job = repo.get_job(job_id)
         if not job:
+            logger.warning("AI采集任务 %s 不存在，跳过", job_id)
+            return
+
+        # 手动模式（小红书等登录墙站）：跳过 Tavily 搜索，直接抽取用户粘贴内容
+        if job.collection_mode == "manual":
+            self._run_manual_collection(db, job)
             return
 
         job.status = "running"
@@ -121,14 +149,35 @@ class AiCollectionService:
 
         query = self._build_search_query(db, job)
         if not query:
+            logger.warning("任务 %s: 搜索query为空（mode=%s），标记 NO_SEARCH_RESULTS", job_id, job.collection_mode)
             self._finish(db, job, error_code="NO_SEARCH_RESULTS")
             return
 
+        domains = self._job_search_domains(job)
+        logger.info(
+            "任务 %s: 开始采集 mode=%s query=%r llm=%s/%s 搜索范围=%s",
+            job_id, job.collection_mode, query,
+            job.llm_provider or settings.LLM_PROVIDER,
+            job.llm_model or default_model_for(job.llm_provider),
+            domains or "全网",
+        )
+
         try:
-            hits = self._tavily.search(query, max_results=job.max_results)
+            hits = self._tavily.search(
+                query, max_results=job.max_results, include_domains=domains or None
+            )
         except TavilyUnavailableError as e:
             self._finish(db, job, error_code="TAVILY_FAILED", reason=str(e))
             return
+        # 防御：限定站点时，剔除 host 不在所选域名内的命中（Tavily include_domains 正常应已保证）
+        if domains:
+            before = len(hits)
+            hits = [h for h in hits if self._host_in_domains(h.url, domains)]
+            if len(hits) != before:
+                logger.warning("任务 %s: %d 条命中不在限定站点内，已跳过", job_id, before - len(hits))
+        logger.info("任务 %s: Tavily 命中 %d 条", job_id, len(hits))
+        for h in hits:
+            logger.info("任务 %s:   候选 %s | %s", job_id, h.url, h.title)
 
         # 精确去重：跳过已采集 URL（raw_hash = sha256(url)）
         ingestion_repo = IngestionRepository(db)
@@ -138,19 +187,37 @@ class AiCollectionService:
                 continue
             raw_hash = hashlib.sha256(hit.url.encode()).hexdigest()
             if ingestion_repo.get_source_by_hash(raw_hash):
+                logger.info("任务 %s:   跳过已采集 %s", job_id, hit.url)
                 continue
             filtered.append(hit)
         if not filtered:
             self._finish(db, job, error_code="NO_SEARCH_RESULTS")
             return
+        logger.info("任务 %s: 去重后剩 %d 条待抓取", job_id, len(filtered))
+
+        # 过滤搜索/分类/标签/视频等不含单道菜谱的列表型 URL：
+        # 这类页面喂给 LLM 必然返回 {"title":""}（模型正确拒绝），提前过滤省调用，也让原因更明确。
+        before = len(filtered)
+        filtered = [h for h in filtered if not self._is_listing_url(h.url)]
+        if len(filtered) != before:
+            logger.warning(
+                "任务 %s: 过滤掉 %d 条列表/视频型 URL（非单菜谱页），保留 %d 条",
+                job_id, before - len(filtered), len(filtered),
+            )
+        if not filtered:
+            self._finish(db, job, error_code="NO_SEARCH_RESULTS")
+            return
 
         try:
-            pages_ok, _failed = self._tavily.extract(
+            pages_ok, pages_failed = self._tavily.extract(
                 [h.url for h in filtered[: settings.AI_COLLECT_MAX_PAGES]]
             )
         except TavilyUnavailableError as e:
             self._finish(db, job, error_code="TAVILY_FAILED", reason=str(e))
             return
+        logger.info("任务 %s: 抓取成功 %d 页 / 失败 %d 页", job_id, len(pages_ok), len(pages_failed))
+        for f in pages_failed:
+            logger.warning("任务 %s:   抓取失败 %s: %s", job_id, f.get("url"), f.get("error"))
 
         # 清洗正文，剔除空页
         pages = []
@@ -159,6 +226,8 @@ class AiCollectionService:
             raw = clean_page_text(page.get("raw_content", ""))
             if url and raw:
                 pages.append((url, raw))
+            elif url:
+                logger.warning("任务 %s:   页面 %s 正文为空，跳过", job_id, url)
 
         # 任务可指定供应商/模型（用户在前端选择），否则用服务默认/配置
         llm = self._llm if self._llm_injected else self._build_job_llm(job)
@@ -166,39 +235,99 @@ class AiCollectionService:
         if not pages:
             self._finish(db, job, error_code="NO_SEARCH_RESULTS")
             return
+        for url, raw in pages:
+            logger.info("任务 %s:   有效页面 %s 正文 %d 字", job_id, url, len(raw))
 
-        # 多来源交叉总结：每批 ≤ AI_COLLECT_MAX_SOURCES 个来源综合成一份菜谱；
-        # 批总结失败或结果校验不通过时回退到批内逐页抽取，避免整批丢失。
-        for batch in self._group_pages(pages):
-            batch_urls = [u for u, _ in batch]
-            if len(batch) >= settings.AI_COLLECT_MIN_SOURCES:
-                try:
-                    recipe = extract_recipe_from_sources(llm, batch)
-                    recipe["source_url"] = batch_urls[0]
-                    if self._process_extracted_recipe(db, job, recipe, batch_urls):
-                        continue
-                except (LLMUnavailableError, LLMValidationError) as e:
-                    logger.warning("多来源总结 %s 失败，回退逐页抽取: %s", batch_urls, e)
-                    job.reason = (
-                        (job.reason or "")
-                        + f"[{','.join(batch_urls)}] 多来源总结失败，回退逐页: {e}\n"
-                    )
-            for url, raw in batch:
-                try:
-                    recipe = extract_recipe_with_fix(llm, url, raw)
-                except (LLMUnavailableError, LLMValidationError) as e:
-                    logger.warning("页面 %s 抽取失败: %s", url, e)
-                    job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
+        # 采集策略：先逐页独立抽取；仅当 ≥2 页的菜谱名（归一化后）完全相同时，
+        # 才把它们综合总结为 1 份菜谱；其余各页独立成候选入库。
+        # 避免把不同菜品/列表页混在一起做多来源总结导致整批被丢弃。
+        extracted: List[tuple] = []
+        for url, raw in pages:
+            logger.info("任务 %s:   逐页抽取 %s", job_id, url)
+            try:
+                recipe = extract_recipe_with_fix(llm, url, raw)
+            except (LLMUnavailableError, LLMValidationError) as e:
+                logger.warning("任务 %s:   页面 %s 抽取失败: %s", job_id, url, e)
+                job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
+                continue
+            recipe["source_url"] = url
+            extracted.append((url, raw, recipe))
+
+        # 按归一化标题分组；标题为空的各页用独立 key（单独校验，最终按"标题为空"拒绝）
+        groups: Dict[str, List[tuple]] = {}
+        for url, raw, recipe in extracted:
+            key = normalize_title(recipe.get("title", "")) or uuid.uuid4().hex
+            groups.setdefault(key, []).append((url, raw, recipe))
+
+        for items in groups.values():
+            urls = [u for u, _, _ in items]
+            if len(items) == 1:
+                url, _raw, recipe = items[0]
+                self._process_extracted_recipe(db, job, recipe, [url])
+                continue
+            # 相同菜名 → 综合总结为 1 份（来源全部记录）；异常或校验未通过则回退逐页独立入库
+            logger.info("任务 %s: %d 个同标题来源 %s 综合总结为 1 份", job_id, len(items), urls)
+            try:
+                recipe = extract_recipe_from_sources(llm, [(u, r) for u, r, _ in items])
+                recipe["source_url"] = urls[0]
+                if self._process_extracted_recipe(db, job, recipe, urls):
                     continue
-                recipe["source_url"] = url
+            except (LLMUnavailableError, LLMValidationError) as e:
+                logger.warning("任务 %s: 同标题综合总结失败 %s: %s", job_id, urls, e)
+                job.reason = (job.reason or "") + f"[{','.join(urls)}] 综合总结失败，回退逐页: {e}\n"
+            for url, _raw, recipe in items:
                 self._process_extracted_recipe(db, job, recipe, [url])
 
         if job.candidates_count == 0:
+            logger.warning("任务 %s: 全部来源未产出候选，标记 EXTRACTION_FAILED", job_id)
             self._finish(db, job, error_code="EXTRACTION_FAILED")
         else:
             job.status = "running"
             job.stage = "review"
+            logger.info("任务 %s: 共产出 %d 个候选，进入人工审核", job_id, job.candidates_count)
             db.commit()
+
+    def _run_manual_collection(self, db: Session, job: IngestionJob) -> None:
+        """手动模式：跳过 Tavily，直接用用户粘贴的 URL+正文走 LLM 抽取。
+
+        用于小红书等登录墙/反爬站点——Tavily 抓不到正文，用户在自己浏览器
+        （已登录）里复制正文粘贴进来，其余走同一套抽取→候选→审核流水线。
+        """
+        job.status = "running"
+        job.stage = "fetched"
+        job.started_at = job.started_at or datetime.utcnow()
+        db.commit()
+
+        llm = self._llm if self._llm_injected else self._build_job_llm(job)
+        url = (job.manual_url or "").strip()
+        content = (job.manual_content or "").strip()
+        if not url or not content:
+            self._finish(db, job, error_code="NO_SEARCH_RESULTS")
+            return
+
+        logger.info(
+            "任务 %s: 手动来源 %s 正文 %d 字 llm=%s/%s",
+            job.id, url, len(content),
+            job.llm_provider or settings.LLM_PROVIDER,
+            job.llm_model or default_model_for(job.llm_provider),
+        )
+        try:
+            recipe = extract_recipe_with_fix(llm, url, content)
+        except (LLMUnavailableError, LLMValidationError) as e:
+            logger.warning("任务 %s: 手动内容抽取失败: %s", job.id, e)
+            job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
+            self._finish(db, job, error_code="EXTRACTION_FAILED")
+            return
+
+        recipe["source_url"] = url
+        if self._process_extracted_recipe(db, job, recipe, [url]):
+            job.status = "running"
+            job.stage = "review"
+            logger.info("任务 %s: 手动来源产出候选，进入人工审核", job.id)
+            db.commit()
+        else:
+            logger.warning("任务 %s: 手动来源抽取结果未通过校验", job.id)
+            self._finish(db, job, error_code="EXTRACTION_FAILED")
 
     def _build_search_query(self, db: Session, job: IngestionJob) -> str:
         """按模式构造搜索查询。"""
@@ -224,10 +353,65 @@ class AiCollectionService:
         return build_llm_provider(provider, model)
 
     @staticmethod
-    def _group_pages(pages: List[tuple]) -> List[List[tuple]]:
-        """把 [(url, raw), ...] 按每批最多 AI_COLLECT_MAX_SOURCES 个来源切批。"""
-        size = max(1, settings.AI_COLLECT_MAX_SOURCES)
-        return [pages[i:i + size] for i in range(0, len(pages), size)]
+    def _is_listing_url(url: str) -> bool:
+        """粗略识别搜索/分类/标签/视频等不含单道菜谱的列表型 URL。
+
+        这类页面没有单道完整菜谱（食材+步骤），喂给 LLM 必然返回 {"title":""}。
+        用 unquote 解码后再匹配，兼容 %E6%90%9C%E5%B0%8B（搜尋）这类编码路径。
+        """
+        lowered = unquote(url or "").lower()
+        if any(host in lowered for host in (
+            "youtube.com", "youtu.be", "bilibili.com", "tiktok.com", "douyin.com",
+        )):
+            return True
+        for hint in (
+            "/search/", "/搜尋/", "/category/", "/categories/",
+            "/tag/", "/tags/", "/recipe-ideas/",
+        ):
+            if hint in lowered:
+                return True
+        for qp in ("?q=", "?search=", "?keyword=", "?query="):
+            if qp in lowered:
+                return True
+        return False
+
+    @staticmethod
+    def _normalize_sites(sites) -> List[str]:
+        """规范化域名列表：去空白/小写/去空去重。"""
+        out = []
+        for s in sites or []:
+            s = (s or "").strip().lower()
+            if s and s not in out:
+                out.append(s)
+        return out
+
+    @staticmethod
+    def _default_search_sites() -> List[str]:
+        """全局默认搜索站点（AI_COLLECT_SEARCH_SITES 逗号分隔）→ 规范化域名列表。"""
+        raw = settings.AI_COLLECT_SEARCH_SITES or ""
+        return AiCollectionService._normalize_sites(raw.split(","))
+
+    @staticmethod
+    def _job_search_domains(job: IngestionJob) -> List[str]:
+        """解析任务存储的搜索域名列表（search_domains_json）。"""
+        if not job.search_domains_json:
+            return []
+        try:
+            data = json.loads(job.search_domains_json)
+        except (ValueError, TypeError):
+            return []
+        if not isinstance(data, list):
+            return []
+        return AiCollectionService._normalize_sites(data)
+
+    @staticmethod
+    def _host_in_domains(url: str, domains: List[str]) -> bool:
+        """URL host 是否属于限定域名（等于域名或以 '.' + 域名 结尾）。"""
+        try:
+            host = urlparse(url).netloc.lower()
+        except ValueError:
+            return False
+        return any(host == d or host.endswith("." + d) for d in domains)
 
     # ------------------------------------------------------------------ #
     # 落库
@@ -237,15 +421,24 @@ class AiCollectionService:
     ) -> bool:
         """校验 → 去重 → 落库候选。返回是否已处理：
         True=已落库或已存在（去重命中）；False=校验未通过（调用方应回退逐页抽取）。"""
-        if not validate_recipe(recipe):
-            job.reason = (job.reason or "") + f"[{','.join(urls)}] 校验未通过\n"
+        vreason = validate_recipe_reason(recipe)
+        if vreason:
+            msg = f"[{','.join(urls)}] 校验未通过（{vreason}）"
+            logger.info("任务 %s: %s title=%r", job.id, msg, recipe.get("title"))
+            job.reason = (job.reason or "") + msg + "\n"
             return False
         dedup_key = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
         if AICollectionRepository(db).get_by_dedup_key(dedup_key):
+            logger.info("任务 %s: 标题去重命中 %r，跳过", job.id, recipe["title"])
             return True
         match_scores = self._find_duplicates(db, recipe)
         self._persist_candidate(db, job, recipe, urls, dedup_key, match_scores)
         job.candidates_count += 1
+        logger.info(
+            "任务 %s: 候选入库 title=%r 食材%d 步骤%d urls=%s",
+            job.id, recipe["title"], len(recipe.get("ingredients", [])),
+            len(recipe.get("steps", [])), urls,
+        )
         db.commit()
         return True
 
@@ -656,6 +849,7 @@ class AiCollectionService:
             llm_configured=llm_configured,
             llm_model=llm_model,
             llm_health=llm_health,
+            default_search_sites=self._default_search_sites(),
         )
 
     # ------------------------------------------------------------------ #
@@ -749,5 +943,7 @@ class AiCollectionService:
             reason=job.reason,
             llm_provider=job.llm_provider,
             llm_model=job.llm_model,
+            search_sites=self._job_search_domains(job) or None,
+            manual_url=job.manual_url,
             candidates=[self._candidate_response(db, c) for c in candidates],
         )

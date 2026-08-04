@@ -54,19 +54,28 @@ class TavilyClient:
             "Content-Type": "application/json",
         }
 
-    def search(self, query: str, max_results: int = 5, search_depth: str = "basic") -> List[TavilySearchResult]:
-        """联网搜索，返回候选结果列表。"""
+    def search(
+        self, query: str, max_results: int = 5, search_depth: str = "basic",
+        include_domains: Optional[List[str]] = None,
+    ) -> List[TavilySearchResult]:
+        """联网搜索，返回候选结果列表。
+
+        include_domains: 限定只在指定域名内搜索（如 ["xiachufang.com"]）；None=全网。
+        """
         try:
+            payload: dict = {
+                "query": query,
+                "search_depth": search_depth,
+                "max_results": max_results,
+                "include_answer": False,
+                "include_raw_content": False,
+            }
+            if include_domains:
+                payload["include_domains"] = list(include_domains)
             resp = self._client.post(
                 "/search",
                 headers=self._headers(),
-                json={
-                    "query": query,
-                    "search_depth": search_depth,
-                    "max_results": max_results,
-                    "include_answer": False,
-                    "include_raw_content": False,
-                },
+                json=payload,
             )
             resp.raise_for_status()
         except httpx.HTTPError as e:

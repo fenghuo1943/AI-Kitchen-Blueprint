@@ -172,10 +172,11 @@ def _split_amount(amount: str):
     return None, None
 
 
-def validate_recipe(recipe: dict) -> bool:
-    """规则校验与归一化：标题非空、至少 1 食材、至少 1 步骤；步骤字符串/对象统一、食材 amount 拆分。"""
+def validate_recipe_reason(recipe: dict) -> Optional[str]:
+    """规则校验与归一化；返回 None 表示通过，否则返回具体失败原因（供日志/任务原因展示）。
+    归一化副作用与 validate_recipe 一致：步骤字符串/对象统一、食材 amount 拆分。"""
     if not recipe.get("title"):
-        return False
+        return "标题为空"
 
     # 食材：兼容 {name, amount} / {name, quantity, unit} / 纯字符串
     ingredients = []
@@ -202,7 +203,7 @@ def validate_recipe(recipe: dict) -> bool:
             "optional": bool(ing.get("optional")),
         })
     if not ingredients:
-        return False
+        return "无食材"
     recipe["ingredients"] = ingredients
 
     # 步骤：兼容 {step_no,instruction} 对象数组 / ["步骤",...] 字符串数组
@@ -218,14 +219,19 @@ def validate_recipe(recipe: dict) -> bool:
             steps.append({"step_no": len(steps) + 1, "instruction": instruction,
                           "duration_minutes": duration})
     if not steps:
-        return False
+        return "无步骤"
     recipe["steps"] = steps
 
     for key in ("servings", "prep_minutes", "cook_minutes"):
         value = recipe.get(key)
         if value is not None and (not isinstance(value, int) or value < 0):
             recipe[key] = None
-    return True
+    return None
+
+
+def validate_recipe(recipe: dict) -> bool:
+    """规则校验与归一化：标题非空、至少 1 食材、至少 1 步骤；通过返回 True。"""
+    return validate_recipe_reason(recipe) is None
 
 
 def normalize_title(title: str) -> str:

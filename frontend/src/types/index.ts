@@ -239,16 +239,21 @@ export interface AICollectJob extends IngestionJob {
   reason?: string;
   llm_provider?: string;
   llm_model?: string;
+  search_sites?: string[];
+  manual_url?: string;
   candidates: AICollectCandidate[];
 }
 
 export interface AICollectionCreate {
   request_text: string;
-  mode: 'topic' | 'ingredients' | 'complete';
+  mode: 'topic' | 'ingredients' | 'complete' | 'manual';
   target_recipe_id?: string;
   max_results?: number;
   llm_provider?: string;
   llm_model?: string;
+  search_sites?: string[];
+  manual_url?: string;
+  manual_content?: string;
 }
 
 export interface LLMModelOption {
@@ -269,6 +274,7 @@ export interface AICollectConfigStatus {
   llm_configured: boolean;
   llm_model?: string;
   llm_health: Record<string, any>;
+  default_search_sites: string[];
 }
 
 // 收藏相关

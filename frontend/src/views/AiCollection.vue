@@ -22,6 +22,7 @@
         <button class="mode-tab" :class="{ active: form.mode === 'topic' }" @click="form.mode = 'topic'">菜名 / 主题</button>
         <button class="mode-tab" :class="{ active: form.mode === 'ingredients' }" @click="form.mode = 'ingredients'">一组食材</button>
         <button class="mode-tab" :class="{ active: form.mode === 'complete' }" @click="form.mode = 'complete'">补全不完整菜谱</button>
+        <button class="mode-tab" :class="{ active: form.mode === 'manual' }" @click="form.mode = 'manual'">手动粘贴</button>
       </div>
 
       <div v-if="form.mode === 'complete'" class="target-select-wrap">
@@ -32,6 +33,25 @@
           </option>
         </select>
         <p class="hint">将联网搜索「目标菜谱」的完整做法，确认后只补全缺失字段。</p>
+      </div>
+
+      <div v-if="form.mode === 'manual'" class="manual-wrap">
+        <input
+          v-model="form.manual_url"
+          class="manual-url"
+          type="text"
+          placeholder="来源页面 URL，如 https://www.xiaohongshu.com/explore/xxx"
+        />
+        <textarea
+          v-model="form.manual_content"
+          class="manual-content"
+          rows="8"
+          placeholder="从网页复制正文粘贴到这里（食材、做法等）…"
+        ></textarea>
+        <p class="hint">适用于登录墙/反爬站点（如小红书）：在自己浏览器里打开页面、复制正文粘贴。将直接用所选 LLM 抽取为菜谱候选，无需 Tavily。</p>
+        <button class="btn btn-primary" :disabled="submitting || polling" @click="submit">
+          {{ submitting ? '提交中…' : (polling ? '采集中…' : '提交总结') }}
+        </button>
       </div>
 
       <div class="model-select-wrap">
@@ -45,7 +65,29 @@
         <span class="hint">把搜索到的网页总结为结构化菜谱；选择会保存在本地。</span>
       </div>
 
-      <div class="search-bar">
+      <div v-if="form.mode !== 'manual'" class="site-select-wrap">
+        <label class="model-label">搜索范围</label>
+        <div class="site-chips">
+          <button
+            v-for="s in PRESET_SITES"
+            :key="s.domain"
+            class="site-chip"
+            :class="{ active: form.search_sites.includes(s.domain) }"
+            @click="toggleSite(s.domain)"
+          >{{ s.name }}</button>
+        </div>
+        <input
+          v-model="form.custom_sites"
+          class="site-custom-input"
+          type="text"
+          placeholder="自定义域名，逗号分隔，如：xiangha.com"
+          @change="applyCustomSites"
+          @keyup.enter="applyCustomSites"
+        />
+        <span class="hint">不选 = 全网搜索。小红书反爬严格、多为笔记，Tavily 可能抓不到正文。</span>
+      </div>
+
+      <div v-if="form.mode !== 'manual'" class="search-bar">
         <input
           v-model="form.request_text"
           class="search-input"
@@ -58,6 +100,9 @@
           <option :value="3">3 条</option>
           <option :value="5">5 条</option>
           <option :value="8">8 条</option>
+          <option :value="10">10 条</option>
+          <option :value="15">15 条</option>
+          <option :value="20">20 条</option>
         </select>
         <button class="btn btn-primary" :disabled="submitting || polling" @click="submit">
           {{ submitting ? '提交中…' : (polling ? '采集中…' : '开始采集') }}
@@ -175,12 +220,26 @@ import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, LLMModelO
 
 const router = useRouter();
 
+// 预设菜谱网站（name 为展示名，domain 传给 Tavily include_domains）
+const PRESET_SITES = [
+  { name: '下厨房', domain: 'xiachufang.com' },
+  { name: '美食天下', domain: 'meishichina.com' },
+  { name: '小红书', domain: 'xiaohongshu.com' },
+  { name: '豆果美食', domain: 'douguo.com' },
+  { name: '心食谱', domain: 'xinshipu.com' },
+  { name: '美食杰', domain: 'meishij.net' }
+];
+
 const config = ref<AICollectConfigStatus | null>(null);
-const form = ref<{ mode: 'topic' | 'ingredients' | 'complete'; request_text: string; target_recipe_id: string; max_results: number }>({
+const form = ref<{ mode: 'topic' | 'ingredients' | 'complete' | 'manual'; request_text: string; target_recipe_id: string; max_results: number; search_sites: string[]; custom_sites: string; manual_url: string; manual_content: string }>({
   mode: 'topic',
   request_text: '',
   target_recipe_id: '',
-  max_results: 5
+  max_results: 15,
+  search_sites: [],
+  custom_sites: '',
+  manual_url: '',
+  manual_content: ''
 });
 
 // ---- LLM 模型选择 ----
@@ -230,10 +289,35 @@ const candidateTargets = ref<Recipe[]>([]);
 const pendingCandidates = ref<AICollectCandidate[]>([]);
 const loadingPending = ref(false);
 
+// ---- 搜索站点选择 ----
+const PRESET_DOMAINS = new Set(PRESET_SITES.map(s => s.domain));
+
+function toggleSite(domain: string) {
+  const idx = form.value.search_sites.indexOf(domain);
+  if (idx >= 0) form.value.search_sites.splice(idx, 1);
+  else form.value.search_sites.push(domain);
+}
+
+function applyCustomSites() {
+  const custom = form.value.custom_sites
+    .split(/[,，]/)
+    .map((d: string) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+    .filter(d => d && !PRESET_DOMAINS.has(d));
+  // 保留预设勾选，仅替换自定义部分
+  const presets = form.value.search_sites.filter(d => PRESET_DOMAINS.has(d));
+  form.value.search_sites = [...new Set([...presets, ...custom])];
+  form.value.custom_sites = custom.join(', ');
+}
+
 // ---- 配置状态 ----
 async function loadConfig() {
   try {
     config.value = await aiCollectApi.configStatus();
+    // 全局默认站点预填（单次可改）：预设部分进 chips，其余进自定义框
+    const defaults = (config.value.default_search_sites || [])
+      .map((d: string) => d.trim().toLowerCase()).filter(Boolean);
+    form.value.search_sites = [...new Set(defaults)];
+    form.value.custom_sites = defaults.filter(d => !PRESET_DOMAINS.has(d)).join(', ');
   } catch (e) {
     console.error('load ai-collect config failed', e);
   }
@@ -255,14 +339,25 @@ watch(() => form.value.mode, (mode) => {
 
 // ---- 提交与轮询 ----
 async function submit() {
-  const text = form.value.request_text.trim();
-  if (!text) {
-    toast('请输入菜名或食材', 'error');
-    return;
-  }
-  if (form.value.mode === 'complete' && !form.value.target_recipe_id) {
-    toast('补全模式请先选择目标菜谱', 'error');
-    return;
+  if (form.value.mode === 'manual') {
+    if (!form.value.manual_url.trim()) {
+      toast('请填写来源 URL', 'error');
+      return;
+    }
+    if (!form.value.manual_content.trim()) {
+      toast('请粘贴网页正文', 'error');
+      return;
+    }
+  } else {
+    const text = form.value.request_text.trim();
+    if (!text) {
+      toast('请输入菜名或食材', 'error');
+      return;
+    }
+    if (form.value.mode === 'complete' && !form.value.target_recipe_id) {
+      toast('补全模式请先选择目标菜谱', 'error');
+      return;
+    }
   }
   submitting.value = true;
   try {
@@ -275,12 +370,15 @@ async function submit() {
       llmModel = selectedModelKey.value.slice(idx + 1);
     }
     const created = await aiCollectApi.createJob({
-      request_text: text,
+      request_text: form.value.mode === 'manual' ? '' : form.value.request_text.trim(),
       mode: form.value.mode,
       target_recipe_id: form.value.mode === 'complete' ? form.value.target_recipe_id : undefined,
-      max_results: form.value.max_results,
+      max_results: form.value.mode === 'manual' ? undefined : form.value.max_results,
       llm_provider: llmProvider,
-      llm_model: llmModel
+      llm_model: llmModel,
+      search_sites: form.value.mode === 'manual' ? undefined : (form.value.search_sites.length ? [...form.value.search_sites] : undefined),
+      manual_url: form.value.mode === 'manual' ? form.value.manual_url.trim() : undefined,
+      manual_content: form.value.mode === 'manual' ? form.value.manual_content : undefined
     });
     toast('已提交采集任务');
     startPolling(created.id);
@@ -456,6 +554,31 @@ onUnmounted(stopPolling);
   border-radius: 8px; font-size: 14px; min-height: 40px; background: white;
 }
 .hint { font-size: 12px; color: #888; margin: 6px 0 0; flex-basis: 100%; }
+
+.site-select-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.site-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.site-chip {
+  padding: 6px 12px; border: 1px solid #e0e0e0; border-radius: 16px;
+  background: white; color: #555; font-size: 13px; cursor: pointer;
+}
+.site-chip.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+.site-custom-input {
+  flex: 1; min-width: 180px; padding: 8px 12px; border: 1px solid #e0e0e0;
+  border-radius: 8px; font-size: 13px; min-height: 36px; background: white;
+}
+
+.manual-wrap { margin-bottom: 12px; }
+.manual-url {
+  width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
+  font-size: 14px; min-height: 40px; margin-bottom: 8px; background: white;
+  box-sizing: border-box;
+}
+.manual-content {
+  width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
+  font-size: 13px; line-height: 1.6; resize: vertical; background: white;
+  box-sizing: border-box;
+}
+.manual-content:focus, .manual-url:focus { outline: none; border-color: #4a90d9; }
 
 .search-bar { display: flex; gap: 10px; }
 .search-input {

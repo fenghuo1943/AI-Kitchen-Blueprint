@@ -56,9 +56,11 @@ class FakeTavily:
         self.results = results or []
         self.pages = pages or ([], [])
         self.search_queries = []
+        self.search_include_domains = None
 
-    def search(self, query, max_results=5, search_depth="basic"):
+    def search(self, query, max_results=5, search_depth="basic", include_domains=None):
         self.search_queries.append(query)
+        self.search_include_domains = include_domains
         return self.results
 
     def extract(self, urls):
@@ -196,6 +198,19 @@ def test_tavily_search(monkeypatch):
     assert results[0].score == 0.9
 
 
+def test_tavily_search_include_domains(monkeypatch):
+    from app.services.tavily_client import TavilyClient
+
+    def fake_post(self, url, headers=None, json=None, **kw):
+        assert json["include_domains"] == ["xiachufang.com", "meishichina.com"]
+        return FakeResp(200, {"results": [{"title": "T", "url": "https://m.xiachufang.com/r", "content": "c", "score": 0.9}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    client = TavilyClient(api_key="k")
+    results = client.search("西红柿 菜谱 做法", include_domains=["xiachufang.com", "meishichina.com"])
+    assert results[0].url == "https://m.xiachufang.com/r"
+
+
 def test_tavily_extract(monkeypatch):
     from app.services.tavily_client import TavilyClient
 
@@ -235,6 +250,22 @@ def test_tavily_missing_key():
 def test_clean_page_text():
     from app.services.tavily_client import clean_page_text
     assert clean_page_text("  <p> 标题 </p>\n 步骤一\t步骤二  ") == "标题 步骤一 步骤二"
+
+
+def test_default_search_sites(monkeypatch):
+    """全局默认站点：逗号分隔 → 规范化（去空白/小写/去重）。"""
+    service = make_service()
+    monkeypatch.setattr(settings, "AI_COLLECT_SEARCH_SITES", " xiachufang.com, MeishiChina.com, ,xiachufang.com ")
+    assert service._default_search_sites() == ["xiachufang.com", "meishichina.com"]
+
+
+def test_host_in_domains():
+    """URL host 与限定域名匹配：等于或子域名。"""
+    svc = make_service()
+    assert svc._host_in_domains("https://m.xiachufang.com/recipe/1", ["xiachufang.com"])
+    assert svc._host_in_domains("https://www.meishichina.com/a.html", ["meishichina.com"])
+    assert not svc._host_in_domains("https://example.com/a", ["xiachufang.com"])
+    assert not svc._host_in_domains("", ["xiachufang.com"])
 
 
 # ------------------------------------------------------------------ #
@@ -488,6 +519,28 @@ def test_create_job_queues(db_session, no_enqueue, tavily_key):
     assert resp.collection_mode == "topic"
 
 
+def test_create_job_stores_search_sites(db_session, no_enqueue, tavily_key):
+    """任务指定 search_sites 时规范化后写入 search_domains_json。"""
+    resp = make_service().create_ai_job(db_session, SimpleNamespace(
+        request_text="牛肉", mode="topic", target_recipe_id=None, max_results=5,
+        llm_provider=None, llm_model=None,
+        search_sites=["xiachufang.com", " MeishiChina.com "],
+    ))
+    job = db_session.query(IngestionJob).filter_by(id=resp.id).first()
+    assert json.loads(job.search_domains_json) == ["xiachufang.com", "meishichina.com"]
+
+
+def test_create_job_search_sites_falls_back_to_config(monkeypatch, db_session, no_enqueue, tavily_key):
+    """未指定 search_sites 时回落全局配置 AI_COLLECT_SEARCH_SITES。"""
+    monkeypatch.setattr(settings, "AI_COLLECT_SEARCH_SITES", "xiachufang.com,meishichina.com")
+    resp = make_service().create_ai_job(db_session, SimpleNamespace(
+        request_text="牛肉", mode="topic", target_recipe_id=None, max_results=5,
+        llm_provider=None, llm_model=None, search_sites=None,
+    ))
+    job = db_session.query(IngestionJob).filter_by(id=resp.id).first()
+    assert json.loads(job.search_domains_json) == ["xiachufang.com", "meishichina.com"]
+
+
 def test_collect_creates_candidates(db_session, no_enqueue, tavily_key):
     service = make_service(
         tavily=FakeTavily(
@@ -535,6 +588,129 @@ def test_collect_skips_ingested_url(db_session, no_enqueue, tavily_key):
     assert job.error_code == "NO_SEARCH_RESULTS"
 
 
+def test_is_listing_url():
+    """列表/搜索/分类/视频型 URL 应被识别，单菜谱页不应被误伤。"""
+    svc = make_service()
+    # 应过滤：站内搜索、分类、标签、索引列表、视频、query 搜索
+    assert svc._is_listing_url("https://icook.tw/search/牛肉")
+    assert svc._is_listing_url("https://cookpad.com/tw/%E6%90%9C%E5%B0%8B/%E7%89%9B%E8%82%89")  # 编码的"搜尋"
+    assert svc._is_listing_url("https://m.xiachufang.com/category/1445")
+    assert svc._is_listing_url("https://www.knorr.com/hk/recipe-ideas/main-ingredients/beef-recipes.html")
+    assert svc._is_listing_url("https://www.youtube.com/watch?v=abc")
+    assert svc._is_listing_url("https://example.com/search?q=牛肉")
+    # 不应过滤：单菜谱页 / 博客单篇文章
+    assert not svc._is_listing_url("https://m.xiachufang.com/recipe/106463192")
+    assert not svc._is_listing_url("https://www.knorr.com/hk/r/xxx.html/211803")
+    assert not svc._is_listing_url("https://www.chefhungfoods.com/blog/posts/beef-noodle-recipe")
+
+
+def test_collect_filters_listing_urls(db_session, no_enqueue, tavily_key):
+    """搜索命中全是搜索/分类/视频页时提前过滤，标记 NO_SEARCH_RESULTS 而非 EXTRACTION_FAILED。"""
+    service = make_service(
+        tavily=FakeTavily(
+            results=[
+                TavilySearchResult("牛肉搜索", "https://icook.tw/search/牛肉", "c", 0.9),
+                TavilySearchResult("牛肉搜索", "https://cookpad.com/tw/搜尋/牛肉", "c", 0.8),
+                TavilySearchResult("牛肉视频", "https://youtube.com/watch?v=abc", "c", 0.7),
+            ],
+        ),
+    )
+    job = make_job(db_session, request_text="牛肉")
+    service._run_collection(db_session, job.id)
+    db_session.refresh(job)
+    assert job.status == "failed"
+    assert job.error_code == "NO_SEARCH_RESULTS"
+    assert job.candidates_count == 0
+
+
+def test_collect_filters_hits_outside_domains(db_session, no_enqueue, tavily_key):
+    """限定站点时：include_domains 传给搜索；命中不在所选域名内应被跳过。"""
+
+    class DomainsTavily(FakeTavily):
+        def __init__(self):
+            super().__init__()
+            self.pages = ([{"url": "https://m.xiachufang.com/recipe/1", "raw_content": "做法正文"}], [])
+
+        def search(self, query, max_results=5, search_depth="basic", include_domains=None):
+            self.search_include_domains = include_domains
+            return [
+                TavilySearchResult("下厨房菜", "https://m.xiachufang.com/recipe/1", "c", 0.9),
+                TavilySearchResult("外部菜", "https://example.com/recipe/2", "c", 0.8),
+            ]
+
+    tavily = DomainsTavily()
+    service = make_service(tavily=tavily, llm=FakeLLM(make_recipe()))
+    job = make_job(db_session, request_text="牛肉")
+    job.search_domains_json = json.dumps(["xiachufang.com"])
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    assert tavily.search_include_domains == ["xiachufang.com"]
+    db_session.refresh(job)
+    assert job.candidates_count == 1  # 仅 xiachufang 命中被处理，外部域名命中被跳过
+
+
+# ------------------------------------------------------------------ #
+# 手动模式（小红书等登录墙站点）
+# ------------------------------------------------------------------ #
+def test_create_ai_job_manual_no_tavily_required(db_session, no_enqueue, monkeypatch):
+    """手动模式不依赖 Tavily：未配置 TAVILY_API_KEY 也能建任务，并存储 URL/正文。"""
+    monkeypatch.setattr(settings, "TAVILY_API_KEY", None)
+    resp = make_service().create_ai_job(db_session, SimpleNamespace(
+        request_text="", mode="manual", target_recipe_id=None, max_results=5,
+        llm_provider=None, llm_model=None, search_sites=None,
+        manual_url="https://www.xiaohongshu.com/explore/1", manual_content="番茄炒蛋……",
+    ))
+    job = db_session.query(IngestionJob).filter_by(id=resp.id).first()
+    assert job.collection_mode == "manual"
+    assert job.manual_url == "https://www.xiaohongshu.com/explore/1"
+    assert job.manual_content == "番茄炒蛋……"
+
+
+def test_create_ai_job_manual_requires_fields(db_session, no_enqueue, tavily_key):
+    with pytest.raises(ValueError) as exc:
+        make_service().create_ai_job(db_session, SimpleNamespace(
+            request_text="", mode="manual", target_recipe_id=None, max_results=5,
+            llm_provider=None, llm_model=None, search_sites=None,
+            manual_url="", manual_content="正文",
+        ))
+    assert "URL" in str(exc.value)
+
+
+def test_manual_collection_creates_candidate(db_session, no_enqueue, tavily_key):
+    """手动模式走 _run_collection 分发：不联网搜索，直接用粘贴内容抽取产出候选。"""
+    tavily = FakeTavily()
+    service = make_service(tavily=tavily, llm=FakeLLM(make_recipe()))
+    job = make_job(db_session, mode="manual", request_text="")
+    job.manual_url = "https://www.xiaohongshu.com/explore/1"
+    job.manual_content = "西红柿炒鸡蛋做法……"
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    assert tavily.search_queries == []  # 手动模式不联网搜索
+    db_session.refresh(job)
+    assert job.stage == "review"
+    assert job.candidates_count == 1
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    assert json.loads(candidate.source_urls_json) == ["https://www.xiaohongshu.com/explore/1"]
+
+
+def test_manual_collection_validation_fails(db_session, no_enqueue, tavily_key):
+    """手动内容抽取结果未通过业务校验 → EXTRACTION_FAILED 且 reason 带原因。"""
+    no_recipe = {"title": "", "ingredients": [], "steps": []}
+    service = make_service(llm=FakeLLM(recipe=no_recipe))
+    job = make_job(db_session, mode="manual", request_text="")
+    job.manual_url = "https://www.xiaohongshu.com/explore/1"
+    job.manual_content = "一些非菜谱内容"
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert job.status == "failed"
+    assert job.error_code == "EXTRACTION_FAILED"
+    assert "校验未通过" in (job.reason or "")
+
+
 def test_collect_handles_page_failure(db_session, no_enqueue, tavily_key):
     bad_url = "https://example.com/bad"
     good_url = "https://example.com/tomato"
@@ -561,9 +737,9 @@ def test_collect_handles_page_failure(db_session, no_enqueue, tavily_key):
 
 
 def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_key):
-    """3 个同菜来源 → 1 次多来源总结 → 1 个候选，source_urls 记录全部来源。"""
+    """3 个同菜名来源 → 先逐页抽取，再综合总结为 1 个候选，source_urls 记录全部来源。"""
     urls = [f"https://example.com/tomato{i}" for i in range(1, 4)]
-    llm = FakeLLM(make_recipe())
+    llm = FakeLLM(make_recipe())  # 3 页逐页都抽出同名"西红柿炒鸡蛋"
     service = make_service(
         tavily=FakeTavily(
             results=[TavilySearchResult("西红柿炒鸡蛋", u, "c", 0.9) for u in urls],
@@ -576,7 +752,7 @@ def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_ke
 
     db_session.refresh(job)
     assert job.candidates_count == 1
-    assert llm.calls == 1  # 多来源总结一次调用，未回退逐页
+    assert llm.calls == 4  # 3 次逐页抽取 + 1 次同标题综合总结
 
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
     assert json.loads(candidate.source_urls_json) == urls
@@ -584,30 +760,53 @@ def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_ke
     assert len(sources) == 3  # 每个来源都建了 RecipeSource，raw_hash 去重生效
 
 
-def test_collect_consolidate_no_recipe_falls_back_to_pages(db_session, no_enqueue, tavily_key):
-    """多来源总结判定"无菜谱"（输出 {title:""}，通过 Pydantic 但过不了业务校验）时，
-    必须回退逐页抽取，而不是整批丢弃。"""
-    urls = [f"https://example.com/tomato{i}" for i in range(1, 4)]
+def test_collect_consolidation_invalid_falls_back_to_pages(db_session, no_enqueue, tavily_key):
+    """同标题来源综合总结结果校验未通过（输出 {title:""}）时，回退逐页独立入库，不整批丢弃。"""
+    urls = [f"https://example.com/a{i}" for i in range(1, 3)]
     no_recipe = {"title": "", "ingredients": [], "steps": []}
     llm = SequencedLLM([
-        no_recipe,  # 第 1 次：多来源总结 → 无菜谱
-        make_recipe(title="日式土豆泥沙拉", url=urls[0]),  # 逐页回退
-        make_recipe(title="彩椒炒蛋", url=urls[1]),
+        make_recipe(title="同一道菜", url=urls[0]),  # 逐页：第 1 页
+        make_recipe(title="同一道菜", url=urls[1]),  # 逐页：第 2 页（同标题 → 分组）
+        no_recipe,                                  # 综合总结 → 无菜谱 → 校验未通过
     ])
     service = make_service(
         tavily=FakeTavily(
-            results=[TavilySearchResult("减脂餐", u, "c", 0.9) for u in urls],
+            results=[TavilySearchResult("菜", u, "c", 0.9) for u in urls],
             pages=([{"url": u, "raw_content": "做法正文"} for u in urls], []),
         ),
         llm=llm,
     )
-    job = make_job(db_session, request_text="减脂餐")
+    job = make_job(db_session, request_text="菜")
     service._run_collection(db_session, job.id)
 
     db_session.refresh(job)
-    assert "校验未通过" in (job.reason or "")  # 批次判定"无菜谱"被记录
-    assert llm.calls == 4                    # 1 次多来源总结 + 3 页逐页回退
-    assert job.candidates_count == 2         # 逐页回退产出候选，整批未丢
+    assert "校验未通过" in (job.reason or "")  # 综合总结"无菜谱"被记录
+    assert llm.calls == 3                    # 2 页逐页 + 1 次综合总结
+    assert job.candidates_count == 1         # 回退逐页产出 1 个候选（同标题去重合并）
+    assert job.stage == "review"
+
+
+def test_collect_distinct_titles_no_consolidation(db_session, no_enqueue, tavily_key):
+    """不同菜名的页面各自独立成候选，不做综合总结。"""
+    urls = [f"https://example.com/recipe{i}" for i in range(1, 4)]
+    llm = SequencedLLM([
+        make_recipe(title="菜A", url=urls[0]),
+        make_recipe(title="菜B", url=urls[1]),
+        make_recipe(title="菜C", url=urls[2]),
+    ])
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("菜", u, "c", 0.9) for u in urls],
+            pages=([{"url": u, "raw_content": "做法正文"} for u in urls], []),
+        ),
+        llm=llm,
+    )
+    job = make_job(db_session)
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert llm.calls == 3            # 3 次逐页抽取，无综合总结调用
+    assert job.candidates_count == 3  # 各页独立成候选
     assert job.stage == "review"
 
 
