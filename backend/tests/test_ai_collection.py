@@ -155,6 +155,7 @@ class FakeResp:
     def __init__(self, status_code, data):
         self.status_code = status_code
         self._data = data
+        self.text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -312,6 +313,103 @@ def test_anthropic_bad_request_is_validation(monkeypatch):
     monkeypatch.setattr(anthropic.Anthropic, "messages", SimpleNamespace(create=fake_create))
     with pytest.raises(LLMValidationError):
         AnthropicLLMProvider(api_key="k").generate([{"role": "user", "content": "hi"}])
+
+
+# ------------------------------------------------------------------ #
+# OpenAI 兼容 LLM Provider（DeepSeek / OpenRouter）
+# ------------------------------------------------------------------ #
+def test_openai_compat_generate(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    captured = {}
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kw):
+        assert url == "/chat/completions"
+        captured["payload"] = json
+        return FakeResp(200, {"choices": [{"message": {"content": '{"title": "T"}'}}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    provider = OpenAICompatLLMProvider(
+        api_key="k", base_url="https://api.deepseek.com", model="deepseek-chat"
+    )
+    result = provider.generate([{"role": "user", "content": "hi"}], response_schema=RecipeExtraction)
+    assert result["title"] == "T"
+    assert captured["payload"]["model"] == "deepseek-chat"
+    assert captured["payload"]["stream"] is False
+    assert captured["payload"]["response_format"] == {"type": "json_object"}
+
+
+def test_openai_compat_response_format_fallback(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    calls = []
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kw):
+        calls.append(json)
+        if len(calls) == 1:
+            return FakeResp(400, {})
+        return FakeResp(200, {"choices": [{"message": {"content": '{"title": "T"}'}}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    provider = OpenAICompatLLMProvider(api_key="k", base_url="https://x")
+    result = provider.generate([{"role": "user", "content": "hi"}], response_schema=RecipeExtraction)
+    assert result["title"] == "T"
+    assert "response_format" not in calls[1]
+
+
+def test_openai_compat_invalid_json(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kw):
+        return FakeResp(200, {"choices": [{"message": {"content": "not json"}}]})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(LLMValidationError):
+        OpenAICompatLLMProvider(api_key="k", base_url="https://x").generate(
+            [{"role": "user", "content": "hi"}]
+        )
+
+
+def test_openai_compat_server_error_is_unavailable(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kw):
+        return FakeResp(500, {"error": "boom"})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(LLMUnavailableError):
+        OpenAICompatLLMProvider(api_key="k", base_url="https://x").generate(
+            [{"role": "user", "content": "hi"}]
+        )
+
+
+def test_openai_compat_unavailable(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kw):
+        raise httpx.ConnectError("boom")
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(LLMUnavailableError):
+        OpenAICompatLLMProvider(api_key="k", base_url="https://x").generate(
+            [{"role": "user", "content": "hi"}]
+        )
+
+
+def test_openai_compat_list_models_and_health(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
+
+    def fake_get(self, url, headers=None, **kw):
+        assert url == "/models"
+        return FakeResp(200, {"data": [{"id": "deepseek-chat"}, {"id": "deepseek-reasoner"}]})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    provider = OpenAICompatLLMProvider(
+        api_key="k", base_url="https://api.deepseek.com", model="deepseek-chat"
+    )
+    assert provider.list_models() == ["deepseek-chat", "deepseek-reasoner"]
+    h = provider.health_check()
+    assert h["ok"] is True and h["model_available"] is True
 
 
 # ------------------------------------------------------------------ #
@@ -652,33 +750,48 @@ def test_api_pending_empty(client, no_enqueue, tavily_key):
 
 
 def test_list_models(monkeypatch):
+    from app.llm.openai_compat import OpenAICompatLLMProvider
     from app.services.ai_collection_service import OllamaLLMProvider
 
     monkeypatch.setattr(
         OllamaLLMProvider, "list_models",
         lambda self: ["qwen3.5:9b", "qwen3.5:4b", "bge-m3:latest"],
     )
+    # 打桩避免真实联网；云供应商列表统一返回 fake 结果
+    monkeypatch.setattr(
+        OpenAICompatLLMProvider, "list_models",
+        lambda self: ["deepseek-chat", "deepseek-reasoner"],
+    )
     monkeypatch.setattr(settings, "LLM_API_KEY", "k")
+    monkeypatch.setattr(settings, "DEEPSEEK_API_KEY", "dk")
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENAI_COMPAT_API_KEY", None)
     res = make_service().list_models()
     providers = {m.provider for m in res.models}
     assert "ollama" in providers
     assert "anthropic" in providers
+    assert "deepseek" in providers
     assert res.default_provider == settings.LLM_PROVIDER
     assert res.default_model == settings.LLM_MODEL
 
 
-def test_list_models_no_anthropic_without_key(monkeypatch):
+def test_list_models_no_cloud_without_key(monkeypatch):
     from app.services.ai_collection_service import OllamaLLMProvider
 
     monkeypatch.setattr(OllamaLLMProvider, "list_models", lambda self: ["qwen3.5:9b"])
     monkeypatch.setattr(settings, "LLM_API_KEY", None)
+    monkeypatch.setattr(settings, "DEEPSEEK_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENAI_COMPAT_API_KEY", None)
     res = make_service().list_models()
-    assert all(m.provider != "anthropic" for m in res.models)
+    assert all(m.provider not in ("anthropic", "deepseek", "openrouter", "openai_compat")
+               for m in res.models)
 
 
 def test_build_job_llm(db_session, no_enqueue):
     from app.llm.anthropic_provider import AnthropicLLMProvider
     from app.llm.ollama import OllamaLLMProvider
+    from app.llm.openai_compat import OpenAICompatLLMProvider
 
     service = make_service()
     job = make_job(db_session)
@@ -693,6 +806,18 @@ def test_build_job_llm(db_session, no_enqueue):
     p2 = service._build_job_llm(job)
     assert isinstance(p2, AnthropicLLMProvider)
     assert p2.model == settings.ANTHROPIC_LLM_MODEL
+
+    job.llm_provider = "deepseek"
+    job.llm_model = None
+    p3 = service._build_job_llm(job)
+    assert isinstance(p3, OpenAICompatLLMProvider)
+    assert p3.model == settings.DEEPSEEK_MODEL
+
+    job.llm_provider = "openrouter"
+    job.llm_model = None
+    p4 = service._build_job_llm(job)
+    assert isinstance(p4, OpenAICompatLLMProvider)
+    assert p4.model == settings.OPENROUTER_MODEL
 
 
 def test_create_ai_job_stores_llm(db_session, no_enqueue, tavily_key):

@@ -72,5 +72,5 @@ def config_status():
 
 @router.get("/models", response_model=LLMModelsResponse)
 def list_models():
-    """可用 LLM 模型列表（Ollama 在线模型 + 可选 Anthropic）与默认选择。"""
+    """可用 LLM 模型列表（Ollama 在线模型 + 可选 Anthropic/DeepSeek/OpenRouter/通用端点）与默认选择。"""
     return AiCollectionService().list_models()

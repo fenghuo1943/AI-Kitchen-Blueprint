@@ -39,6 +39,20 @@ class Settings(BaseSettings):
     # 注意：不用 ANTHROPIC_MODEL 这个名字，避免与外壳/工具链的 ANTHROPIC_MODEL 环境变量冲突
     ANTHROPIC_LLM_MODEL: str = "claude-opus-5"  # 可选商业供应商默认模型
 
+    # OpenAI 兼容云端供应商（AI 采集摘要）：LLM_PROVIDER=deepseek/openrouter/openai_compat 时生效。
+    # DeepSeek 官方 API（OpenAI 协议）
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    # OpenRouter 聚合（含小米 MiMo 等开源模型）
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_MODEL: str = "xiaomi/mimo-7b"     # MiMo 预设，可按实际改
+    # 任意 OpenAI 兼容端点（base_url 留空时回落 LLM_BASE_URL）
+    OPENAI_COMPAT_API_KEY: Optional[str] = None
+    OPENAI_COMPAT_BASE_URL: str = ""
+    OPENAI_COMPAT_MODEL: str = "gpt-4o-mini"     # 通用占位，按实际端点填写
+
     # 联网搜索（Tavily）
     TAVILY_API_KEY: Optional[str] = None
     TAVILY_BASE_URL: str = "https://api.tavily.com"

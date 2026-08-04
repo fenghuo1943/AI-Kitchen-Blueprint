@@ -28,9 +28,10 @@ from app.db.models import (
 )
 from app.llm import (
     LLMProvider, LLMUnavailableError, LLMValidationError,
-    build_llm_provider, get_llm_provider,
+    build_llm_provider, default_model_for, get_llm_provider,
 )
 from app.llm.ollama import OllamaLLMProvider
+from app.llm.openai_compat import OpenAICompatLLMProvider
 from app.llm.prompts import (
     extract_recipe_from_sources, extract_recipe_with_fix,
     normalize_title, validate_recipe,
@@ -219,10 +220,7 @@ class AiCollectionService:
     def _build_job_llm(job: IngestionJob) -> LLMProvider:
         """按任务记录的供应商/模型构造 LLM Provider（缺省回落配置）。"""
         provider = job.llm_provider or settings.LLM_PROVIDER
-        if provider == "anthropic":
-            model = job.llm_model or settings.ANTHROPIC_LLM_MODEL
-        else:
-            model = job.llm_model or settings.LLM_MODEL
+        model = job.llm_model or default_model_for(provider)
         return build_llm_provider(provider, model)
 
     @staticmethod
@@ -580,14 +578,31 @@ class AiCollectionService:
             page_size=page_size,
         )
 
+    @staticmethod
+    def _append_cloud_models(
+        models: List[LLMModelOption], provider: str, label: str,
+        api_key: Optional[str], base_url: str, default_model: str,
+    ) -> None:
+        """追加 OpenAI 兼容云端模型选项：优先枚举真实模型，失败回落配置默认模型。"""
+        if not api_key:
+            return
+        try:
+            names = OpenAICompatLLMProvider(
+                api_key=api_key, base_url=base_url, model=default_model
+            ).list_models()
+        except LLMUnavailableError:
+            names = [default_model]
+        for name in names:
+            models.append(LLMModelOption(provider=provider, model=name, label=f"{label} {name}"))
+
     def list_models(self) -> LLMModelsResponse:
-        """可用模型列表：Ollama 在线且支持文本生成的模型 + Anthropic 可选。"""
+        """可用模型列表：Ollama 在线模型 + Anthropic/DeepSeek/OpenRouter/通用端点可选。"""
         models: List[LLMModelOption] = []
         try:
             for name in OllamaLLMProvider().list_models():
                 models.append(LLMModelOption(provider="ollama", model=name, label=f"本地 {name}"))
         except LLMUnavailableError:
-            pass  # Ollama 不可达，仅返回 Anthropic（如有）
+            pass  # Ollama 不可达，仅返回云端选项
 
         if settings.LLM_API_KEY:
             models.append(LLMModelOption(
@@ -596,20 +611,39 @@ class AiCollectionService:
                 label=f"云端 {settings.ANTHROPIC_LLM_MODEL}",
             ))
 
-        default_provider = settings.LLM_PROVIDER
-        default_model = (
-            settings.ANTHROPIC_LLM_MODEL if default_provider == "anthropic" else settings.LLM_MODEL
+        # OpenAI 兼容云端供应商（DeepSeek / OpenRouter / 通用端点）
+        self._append_cloud_models(
+            models, "deepseek", "DeepSeek",
+            settings.DEEPSEEK_API_KEY or settings.LLM_API_KEY,
+            settings.DEEPSEEK_BASE_URL, settings.DEEPSEEK_MODEL,
         )
+        self._append_cloud_models(
+            models, "openrouter", "OpenRouter",
+            settings.OPENROUTER_API_KEY or settings.LLM_API_KEY,
+            settings.OPENROUTER_BASE_URL, settings.OPENROUTER_MODEL,
+        )
+        self._append_cloud_models(
+            models, "openai_compat", "OpenAI兼容",
+            settings.OPENAI_COMPAT_API_KEY or settings.LLM_API_KEY,
+            settings.OPENAI_COMPAT_BASE_URL or settings.LLM_BASE_URL, settings.OPENAI_COMPAT_MODEL,
+        )
+
         return LLMModelsResponse(
             models=models,
-            default_provider=default_provider,
-            default_model=default_model,
+            default_provider=settings.LLM_PROVIDER,
+            default_model=default_model_for(settings.LLM_PROVIDER),
         )
 
     def config_status(self) -> ConfigStatusResponse:
         llm_provider = settings.LLM_PROVIDER
-        llm_configured = llm_provider == "ollama" or bool(settings.LLM_API_KEY)
-        llm_model = settings.ANTHROPIC_LLM_MODEL if llm_provider == "anthropic" else settings.LLM_MODEL
+        llm_configured = {
+            "ollama": True,
+            "anthropic": bool(settings.LLM_API_KEY),
+            "deepseek": bool(settings.DEEPSEEK_API_KEY or settings.LLM_API_KEY),
+            "openrouter": bool(settings.OPENROUTER_API_KEY or settings.LLM_API_KEY),
+            "openai_compat": bool(settings.OPENAI_COMPAT_API_KEY or settings.LLM_API_KEY),
+        }.get(llm_provider, True)  # 未知供应商按已配置处理，运行期报错
+        llm_model = default_model_for(llm_provider)
         try:
             llm_health = self._llm.health_check()
         except Exception as e:  # noqa: BLE001 - 健康检查吞掉

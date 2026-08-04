@@ -8,7 +8,7 @@
         ⚠️ 未配置 Tavily 搜索：请在 <code>.env</code> 中填写 <code>TAVILY_API_KEY</code>（tavily.com 免费注册）。
       </template>
       <template v-else-if="!config.llm_configured">
-        ⚠️ 未配置 LLM：默认使用本地 Ollama（<code>LLM_PROVIDER=ollama</code>），或配置 Anthropic key 后设置 <code>LLM_PROVIDER=anthropic</code>。
+        ⚠️ 未配置 LLM：默认使用本地 Ollama（<code>LLM_PROVIDER=ollama</code>），或配置 DeepSeek/Anthropic/OpenRouter key 后设置对应 <code>LLM_PROVIDER</code>。
       </template>
       <template v-else>
         ✅ 搜索与 LLM 均已配置（{{ config.llm_provider }}）。输入菜名/食材，联网搜索并总结为待审菜谱。
@@ -405,7 +405,7 @@ function statusLabel(status: string): string {
 const ERROR_TEXT: Record<string, string> = {
   TAVILY_NOT_CONFIGURED: '未配置 TAVILY_API_KEY',
   TAVILY_FAILED: '联网搜索失败（请检查 TAVILY_API_KEY 与网络）',
-  LLM_UNAVAILABLE: 'LLM 服务不可用（检查 Ollama/Anthropic 配置）',
+  LLM_UNAVAILABLE: 'LLM 服务不可用（检查 Ollama/云端 LLM 配置）',
   NO_SEARCH_RESULTS: '未找到匹配内容，请更换关键词',
   EXTRACTION_FAILED: '抽取失败，无法生成候选',
   COLLECTION_FAILED: '采集过程出错'
