@@ -38,7 +38,8 @@ class CandidateResponse(BaseModel):
     recipe: Optional[RecipeResponse] = None
     action: str
     merge_mode: str
-    source_url: Optional[str] = None
+    source_url: Optional[str] = None       # 主来源（第一个）
+    source_urls: List[str] = []           # 参考的全部来源 URL
     normalized_title: Optional[str] = None
     core_ingredients: List[str] = []
     match_scores: Dict = {}

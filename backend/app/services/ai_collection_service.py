@@ -31,7 +31,10 @@ from app.llm import (
     build_llm_provider, get_llm_provider,
 )
 from app.llm.ollama import OllamaLLMProvider
-from app.llm.prompts import extract_recipe_with_fix, normalize_title, validate_recipe
+from app.llm.prompts import (
+    extract_recipe_from_sources, extract_recipe_with_fix,
+    normalize_title, validate_recipe,
+)
 from app.repositories.ai_collection_repository import AICollectionRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.repositories.ingestion_repository import IngestionRepository
@@ -148,41 +151,49 @@ class AiCollectionService:
             self._finish(db, job, error_code="TAVILY_FAILED", reason=str(e))
             return
 
-        # 任务可指定供应商/模型（用户在前端选择），否则用服务默认/配置
-        llm = self._llm if self._llm_injected else self._build_job_llm(job)
-
-        had_pages = False
+        # 清洗正文，剔除空页
+        pages = []
         for page in pages_ok:
             url = page.get("url") or ""
             raw = clean_page_text(page.get("raw_content", ""))
-            if not url or not raw:
-                continue
-            had_pages = True
-            try:
-                recipe = extract_recipe_with_fix(llm, url, raw)
-            except (LLMUnavailableError, LLMValidationError) as e:
-                logger.warning("页面 %s 抽取失败: %s", url, e)
-                job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
-                continue
-            recipe["source_url"] = url
-            if not validate_recipe(recipe):
-                job.reason = (job.reason or "") + f"[{url}] 校验未通过\n"
-                continue
+            if url and raw:
+                pages.append((url, raw))
 
-            dedup_key = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
-            if repo.get_by_dedup_key(dedup_key):
-                continue
+        # 任务可指定供应商/模型（用户在前端选择），否则用服务默认/配置
+        llm = self._llm if self._llm_injected else self._build_job_llm(job)
 
-            match_scores = self._find_duplicates(db, recipe)
-            self._persist_candidate(db, job, recipe, url, dedup_key, match_scores)
-            job.candidates_count += 1
-            db.commit()
+        if not pages:
+            self._finish(db, job, error_code="NO_SEARCH_RESULTS")
+            return
+
+        # 多来源交叉总结：每批 ≤ AI_COLLECT_MAX_SOURCES 个来源综合成一份菜谱；
+        # 批总结失败时回退到批内逐页抽取，避免整批丢失。
+        for batch in self._group_pages(pages):
+            batch_urls = [u for u, _ in batch]
+            if len(batch) >= settings.AI_COLLECT_MIN_SOURCES:
+                try:
+                    recipe = extract_recipe_from_sources(llm, batch)
+                    recipe["source_url"] = batch_urls[0]
+                    self._process_extracted_recipe(db, job, recipe, batch_urls)
+                    continue
+                except (LLMUnavailableError, LLMValidationError) as e:
+                    logger.warning("多来源总结 %s 失败，回退逐页抽取: %s", batch_urls, e)
+                    job.reason = (
+                        (job.reason or "")
+                        + f"[{','.join(batch_urls)}] 多来源总结失败，回退逐页: {e}\n"
+                    )
+            for url, raw in batch:
+                try:
+                    recipe = extract_recipe_with_fix(llm, url, raw)
+                except (LLMUnavailableError, LLMValidationError) as e:
+                    logger.warning("页面 %s 抽取失败: %s", url, e)
+                    job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
+                    continue
+                recipe["source_url"] = url
+                self._process_extracted_recipe(db, job, recipe, [url])
 
         if job.candidates_count == 0:
-            self._finish(
-                db, job,
-                error_code="NO_SEARCH_RESULTS" if not had_pages else "EXTRACTION_FAILED",
-            )
+            self._finish(db, job, error_code="EXTRACTION_FAILED")
         else:
             job.status = "running"
             job.stage = "review"
@@ -214,23 +225,55 @@ class AiCollectionService:
             model = job.llm_model or settings.LLM_MODEL
         return build_llm_provider(provider, model)
 
+    @staticmethod
+    def _group_pages(pages: List[tuple]) -> List[List[tuple]]:
+        """把 [(url, raw), ...] 按每批最多 AI_COLLECT_MAX_SOURCES 个来源切批。"""
+        size = max(1, settings.AI_COLLECT_MAX_SOURCES)
+        return [pages[i:i + size] for i in range(0, len(pages), size)]
+
     # ------------------------------------------------------------------ #
     # 落库
     # ------------------------------------------------------------------ #
+    def _process_extracted_recipe(
+        self, db: Session, job: IngestionJob, recipe: dict, urls: List[str],
+    ) -> None:
+        """校验 → 去重 → 落库候选。recipe 需已通过/将过 validate_recipe 归一。"""
+        if not validate_recipe(recipe):
+            job.reason = (job.reason or "") + f"[{','.join(urls)}] 校验未通过\n"
+            return
+        dedup_key = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+        if AICollectionRepository(db).get_by_dedup_key(dedup_key):
+            return
+        match_scores = self._find_duplicates(db, recipe)
+        self._persist_candidate(db, job, recipe, urls, dedup_key, match_scores)
+        job.candidates_count += 1
+        db.commit()
+
     def _persist_candidate(
         self, db: Session, job: IngestionJob, recipe: dict,
-        url: str, dedup_key: str, match_scores: dict,
+        urls: List[str], dedup_key: str, match_scores: dict,
     ) -> None:
-        """把抽取结果落库为 review 候选 + IngestionCandidate。"""
-        source = RecipeSource(
-            id=str(uuid.uuid4()),
-            source_type="url",
-            source_url=url,
-            raw_hash=hashlib.sha256(url.encode()).hexdigest(),
-            fetched_at=datetime.utcnow(),
-        )
-        db.add(source)
-        db.flush()
+        """把抽取结果落库为 review 候选 + IngestionCandidate。
+
+        urls 为该候选参考的全部来源 URL：逐个建 RecipeSource（raw_hash 去重生效），
+        主来源（第一个）写入 recipe/candidate.source_id，全部 URL 记录到 source_urls_json。
+        """
+        source_rows = []
+        for url in urls:
+            url = (url or "").strip()
+            if not url:
+                continue
+            source_rows.append(RecipeSource(
+                id=str(uuid.uuid4()),
+                source_type="url",
+                source_url=url,
+                raw_hash=hashlib.sha256(url.encode()).hexdigest(),
+                fetched_at=datetime.utcnow(),
+            ))
+        if source_rows:
+            db.add_all(source_rows)
+            db.flush()
+        primary_source = source_rows[0] if source_rows else None
 
         cand_recipe = Recipe(
             id=str(uuid.uuid4()),
@@ -242,7 +285,7 @@ class AiCollectionService:
             cook_minutes=recipe.get("cook_minutes"),
             difficulty=recipe.get("difficulty"),
             status="review",
-            source_id=source.id,
+            source_id=primary_source.id if primary_source else None,
             revision=1,
             created_by="ai_search",
         )
@@ -290,7 +333,10 @@ class AiCollectionService:
             id=str(uuid.uuid4()),
             job_id=job.id,
             recipe_id=cand_recipe.id,
-            source_id=source.id,
+            source_id=primary_source.id if primary_source else None,
+            source_urls_json=json.dumps(
+                [s.source_url for s in source_rows], ensure_ascii=False
+            ),
             target_recipe_id=job.target_recipe_id if job.collection_mode == "complete" else None,
             action="pending",
             merge_mode="merge" if job.collection_mode == "complete" else "new",
@@ -621,6 +667,12 @@ class AiCollectionService:
                 core_ingredients = json.loads(candidate.core_ingredients_json)
             except (ValueError, TypeError):
                 core_ingredients = []
+        source_urls: List[str] = []
+        if candidate.source_urls_json:
+            try:
+                source_urls = json.loads(candidate.source_urls_json)
+            except (ValueError, TypeError):
+                source_urls = []
         source_url = candidate.source.source_url if candidate.source else None
         recipe = self._recipe_response(db, candidate.recipe) if candidate.recipe else None
         return CandidateResponse(
@@ -630,6 +682,7 @@ class AiCollectionService:
             action=candidate.action,
             merge_mode=candidate.merge_mode,
             source_url=source_url,
+            source_urls=source_urls,
             normalized_title=candidate.normalized_title,
             core_ingredients=core_ingredients,
             match_scores=match_scores,

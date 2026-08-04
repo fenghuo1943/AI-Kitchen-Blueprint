@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     AI_COLLECT_MAX_PAGES: int = 5       # 单任务最多采集页数
     AI_COLLECT_PAGE_CHARS: int = 8000   # 单页喂给 LLM 的字符上限（截断）
     AI_COLLECT_CONCURRENCY: int = 1     # 本地小模型串行，避免压垮 Ollama
+    AI_COLLECT_MIN_SOURCES: int = 2     # 综合总结一份菜谱至少参考的来源数
+    AI_COLLECT_MAX_SOURCES: int = 3     # 每批最多合并的来源数（单批一次 LLM 调用）
 
     # RAG 配置
     VECTOR_STORE_TYPE: str = "chroma"

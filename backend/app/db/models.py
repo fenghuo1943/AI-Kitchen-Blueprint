@@ -290,6 +290,7 @@ class IngestionCandidate(Base, TimestampMixin):
     merge_mode = Column(String(20), default="new", nullable=False)   # new|merge
     dedup_key = Column(String(64), nullable=True)                    # sha256(归一标题)
     normalized_title = Column(String(200), nullable=True)
+    source_urls_json = Column(Text, nullable=True)                   # JSON: 参考的全部来源 URL
     core_ingredients_json = Column(Text, nullable=True)              # JSON: ["西红柿","鸡蛋"]
     match_scores_json = Column(Text, nullable=True)                  # JSON: 与已发布/候选菜谱重叠判定
     reason = Column(Text, nullable=True)                             # LLM 置信度/说明

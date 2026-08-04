@@ -18,7 +18,9 @@ from app.db.models import (
     RecipeRevision, RecipeSource, RecipeStep,
 )
 from app.llm import LLMProvider, LLMUnavailableError, LLMValidationError
-from app.llm.prompts import RecipeExtraction, extract_recipe_with_fix, normalize_title
+from app.llm.prompts import (
+    RecipeExtraction, extract_recipe_from_sources, extract_recipe_with_fix, normalize_title,
+)
 from app.llm.schema import sanitize_schema_for_anthropic
 from app.services.ai_collection_service import AiCollectionService
 from app.services.tavily_client import TavilySearchResult, TavilyUnavailableError
@@ -322,6 +324,15 @@ def test_extract_recipe_with_fix_retries():
     assert result["title"] == "西红柿炒鸡蛋"
 
 
+def test_extract_recipe_from_sources_retries():
+    llm = FakeLLM(make_recipe(), fail_then_succeed=True)
+    result = extract_recipe_from_sources(
+        llm, [("https://example.com/a", "正文1"), ("https://example.com/b", "正文2")]
+    )
+    assert llm.calls == 2
+    assert result["title"] == "西红柿炒鸡蛋"
+
+
 # ------------------------------------------------------------------ #
 # 采集流水线
 # ------------------------------------------------------------------ #
@@ -423,6 +434,67 @@ def test_collect_handles_page_failure(db_session, no_enqueue, tavily_key):
     assert "抽取失败" in (job.reason or "")
 
 
+def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_key):
+    """3 个同菜来源 → 1 次多来源总结 → 1 个候选，source_urls 记录全部来源。"""
+    urls = [f"https://example.com/tomato{i}" for i in range(1, 4)]
+    llm = FakeLLM(make_recipe())
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("西红柿炒鸡蛋", u, "c", 0.9) for u in urls],
+            pages=([{"url": u, "raw_content": "西红柿炒鸡蛋做法……"} for u in urls], []),
+        ),
+        llm=llm,
+    )
+    job = make_job(db_session)
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert job.candidates_count == 1
+    assert llm.calls == 1  # 多来源总结一次调用，未回退逐页
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    assert json.loads(candidate.source_urls_json) == urls
+    sources = db_session.query(RecipeSource).filter(RecipeSource.source_url.in_(urls)).all()
+    assert len(sources) == 3  # 每个来源都建了 RecipeSource，raw_hash 去重生效
+
+
+def test_collect_single_source_stays_single(db_session, no_enqueue, tavily_key):
+    """只有 1 个可用来源时保持单来源抽取（多来源总结前置条件不满足）。"""
+    url = "https://example.com/tomato"
+    llm = FakeLLM(make_recipe())
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("西红柿炒鸡蛋", url, "c", 0.9)],
+            pages=one_page(url),
+        ),
+        llm=llm,
+    )
+    job = make_job(db_session)
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert job.candidates_count == 1
+    assert llm.calls == 1  # 单来源逐页抽取
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    assert json.loads(candidate.source_urls_json) == [url]
+
+
+def test_candidate_response_has_source_urls(db_session, no_enqueue, tavily_key):
+    """候选响应返回 source_urls（全部参考来源）与 source_url（主来源）。"""
+    job = make_job(db_session)
+    urls = ["https://example.com/tomato1", "https://example.com/tomato2"]
+    service = make_service()
+    recipe = make_recipe()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, urls, dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    resp = service._candidate_response(db_session, candidate)
+    assert resp.source_urls == urls
+    assert resp.source_url == urls[0]
+
+
 def test_collect_no_results(db_session, no_enqueue, tavily_key):
     service = make_service(tavily=FakeTavily(results=[], pages=([], [])))
     job = make_job(db_session)
@@ -472,7 +544,7 @@ def _persist_candidate_for(db, job, recipe=None):
     recipe = recipe or make_recipe()
     service = make_service()
     dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
-    service._persist_candidate(db, job, recipe, recipe["source_url"], dedup, {})
+    service._persist_candidate(db, job, recipe, [recipe["source_url"]], dedup, {})
     db.commit()
     return db.query(IngestionCandidate).filter_by(job_id=job.id).first()
 

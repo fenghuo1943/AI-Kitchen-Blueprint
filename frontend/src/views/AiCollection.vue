@@ -111,8 +111,11 @@
             </div>
           </div>
 
-          <div v-if="c.source_url" class="source-line">
-            来源：<a :href="c.source_url" target="_blank" rel="noopener noreferrer">{{ c.source_url }}</a>
+          <div v-if="sourceList(c).length" class="source-line">
+            参考来源<template v-if="sourceList(c).length > 1">（{{ sourceList(c).length }} 个）</template>：
+            <template v-for="(u, i) in sourceList(c)" :key="u + i">
+              <a :href="u" target="_blank" rel="noopener noreferrer">{{ u }}</a><template v-if="i < sourceList(c).length - 1">；</template>
+            </template>
           </div>
 
           <div class="candidate-actions">
@@ -146,8 +149,11 @@
           <div v-if="c.core_ingredients.length" class="candidate-tags">
             <span v-for="name in c.core_ingredients" :key="name" class="tag">{{ name }}</span>
           </div>
-          <div v-if="c.source_url" class="source-line">
-            来源：<a :href="c.source_url" target="_blank" rel="noopener noreferrer">{{ c.source_url }}</a>
+          <div v-if="sourceList(c).length" class="source-line">
+            参考来源<template v-if="sourceList(c).length > 1">（{{ sourceList(c).length }} 个）</template>：
+            <template v-for="(u, i) in sourceList(c)" :key="u + i">
+              <a :href="u" target="_blank" rel="noopener noreferrer">{{ u }}</a><template v-if="i < sourceList(c).length - 1">；</template>
+            </template>
           </div>
           <div class="candidate-actions">
             <button class="btn btn-primary btn-small" @click="approve(c)">{{ c.merge_mode === 'merge' ? '确认合并' : '确认入库' }}</button>
@@ -373,6 +379,12 @@ async function loadPending() {
 // ---- 展示辅助 ----
 function hasMatches(c: AICollectCandidate): boolean {
   return !!((c.match_scores.title_duplicates?.length) || (c.match_scores.ingredient_overlaps?.length));
+}
+
+/** 候选参考的全部来源 URL（多来源优先，兼容旧数据只有主来源） */
+function sourceList(c: AICollectCandidate): string[] {
+  if (c.source_urls && c.source_urls.length) return c.source_urls;
+  return c.source_url ? [c.source_url] : [];
 }
 
 const STAGE_LABELS: Record<string, string> = {

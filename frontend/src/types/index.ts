@@ -218,6 +218,7 @@ export interface AICollectCandidate {
   action: string;
   merge_mode: string;
   source_url?: string;
+  source_urls?: string[];
   normalized_title?: string;
   core_ingredients: string[];
   match_scores: {
