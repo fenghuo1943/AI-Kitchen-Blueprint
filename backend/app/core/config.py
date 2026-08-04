@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # LLM 配置
     LLM_PROVIDER: str = "ollama"
-    LLM_MODEL: str = "qwen2.5"
+    LLM_MODEL: str = "qwen3.5:9b"
     LLM_API_KEY: Optional[str] = None
     LLM_BASE_URL: str = "http://localhost:11434"
 

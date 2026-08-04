@@ -13,6 +13,22 @@ class AICollectionCreate(BaseModel):
     mode: Literal["topic", "ingredients", "complete"] = Field("topic", description="采集模式")
     target_recipe_id: Optional[str] = Field(None, description="补全模式的目标菜谱 ID")
     max_results: int = Field(5, ge=1, le=10, description="最多采集页数")
+    llm_provider: Optional[str] = Field(None, description="采集用 LLM 供应商：ollama/anthropic（缺省取配置）")
+    llm_model: Optional[str] = Field(None, description="采集用模型名（缺省取配置）")
+
+
+class LLMModelOption(BaseModel):
+    """可用的 LLM 模型选项"""
+    provider: str
+    model: str
+    label: str
+
+
+class LLMModelsResponse(BaseModel):
+    """可用模型列表 + 默认选择"""
+    models: List[LLMModelOption] = []
+    default_provider: str
+    default_model: str
 
 
 class CandidateResponse(BaseModel):
@@ -39,6 +55,8 @@ class AICollectionJobResponse(IngestionResponse):
     target_recipe_id: Optional[str] = None
     candidates_count: int = 0
     reason: Optional[str] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
     candidates: List[CandidateResponse] = []
 
 
@@ -55,4 +73,5 @@ class ConfigStatusResponse(BaseModel):
     tavily_configured: bool
     llm_provider: str
     llm_configured: bool
+    llm_model: Optional[str] = None
     llm_health: Dict = {}

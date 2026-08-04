@@ -260,6 +260,8 @@ class IngestionJob(Base, TimestampMixin):
     candidates_count = Column(Integer, default=0, nullable=False)    # AI 采集候选数
     index_status = Column(String(20), nullable=True)
     reason = Column(Text, nullable=True)                             # 采集说明/逐页失败原因
+    llm_provider = Column(String(20), nullable=True)                 # 采集时使用的 LLM 供应商
+    llm_model = Column(String(100), nullable=True)                   # 采集时使用的模型名
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 

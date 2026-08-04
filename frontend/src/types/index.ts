@@ -236,6 +236,8 @@ export interface AICollectJob extends IngestionJob {
   target_recipe_id?: string;
   candidates_count: number;
   reason?: string;
+  llm_provider?: string;
+  llm_model?: string;
   candidates: AICollectCandidate[];
 }
 
@@ -244,12 +246,27 @@ export interface AICollectionCreate {
   mode: 'topic' | 'ingredients' | 'complete';
   target_recipe_id?: string;
   max_results?: number;
+  llm_provider?: string;
+  llm_model?: string;
+}
+
+export interface LLMModelOption {
+  provider: string;
+  model: string;
+  label: string;
+}
+
+export interface LLMModelsResponse {
+  models: LLMModelOption[];
+  default_provider: string;
+  default_model: string;
 }
 
 export interface AICollectConfigStatus {
   tavily_configured: boolean;
   llm_provider: string;
   llm_configured: boolean;
+  llm_model?: string;
   llm_health: Record<string, any>;
 }
 

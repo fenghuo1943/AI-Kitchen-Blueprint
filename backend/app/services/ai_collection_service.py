@@ -26,7 +26,11 @@ from app.db.models import (
     RecipeIngredient, RecipeRevision, RecipeSource, RecipeStep,
     RecipeTag, Tag,
 )
-from app.llm import LLMProvider, LLMUnavailableError, LLMValidationError, get_llm_provider
+from app.llm import (
+    LLMProvider, LLMUnavailableError, LLMValidationError,
+    build_llm_provider, get_llm_provider,
+)
+from app.llm.ollama import OllamaLLMProvider
 from app.llm.prompts import extract_recipe_with_fix, normalize_title, validate_recipe
 from app.repositories.ai_collection_repository import AICollectionRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -34,7 +38,8 @@ from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.recipe_repository import RecipeRepository
 from app.schemas.ai_collection import (
     AICollectionCreate, AICollectionJobResponse, CandidateResponse,
-    ConfigStatusResponse, PaginatedCandidateResponse,
+    ConfigStatusResponse, LLMModelOption, LLMModelsResponse,
+    PaginatedCandidateResponse,
 )
 from app.services.tavily_client import TavilyClient, TavilyUnavailableError, clean_page_text
 from app.tasks import executor
@@ -47,6 +52,7 @@ class AiCollectionService:
 
     def __init__(self, tavily: Optional[TavilyClient] = None, llm: Optional[LLMProvider] = None):
         self._tavily = tavily or TavilyClient()
+        self._llm_injected = llm is not None
         self._llm = llm or get_llm_provider()
 
     # ------------------------------------------------------------------ #
@@ -74,6 +80,8 @@ class AiCollectionService:
             target_recipe_id=data.target_recipe_id if data.mode == "complete" else None,
             max_results=min(data.max_results, settings.AI_COLLECT_MAX_PAGES),
             candidates_count=0,
+            llm_provider=data.llm_provider,
+            llm_model=data.llm_model,
         )
         repo = AICollectionRepository(db)
         job = repo.create_job(job)
@@ -140,6 +148,9 @@ class AiCollectionService:
             self._finish(db, job, error_code="TAVILY_FAILED", reason=str(e))
             return
 
+        # 任务可指定供应商/模型（用户在前端选择），否则用服务默认/配置
+        llm = self._llm if self._llm_injected else self._build_job_llm(job)
+
         had_pages = False
         for page in pages_ok:
             url = page.get("url") or ""
@@ -148,7 +159,7 @@ class AiCollectionService:
                 continue
             had_pages = True
             try:
-                recipe = extract_recipe_with_fix(self._llm, url, raw)
+                recipe = extract_recipe_with_fix(llm, url, raw)
             except (LLMUnavailableError, LLMValidationError) as e:
                 logger.warning("页面 %s 抽取失败: %s", url, e)
                 job.reason = (job.reason or "") + f"[{url}] 抽取失败: {e}\n"
@@ -192,6 +203,16 @@ class AiCollectionService:
                 return f"{target.title} 完整做法 食材 步骤"
             return ""
         return f"{text} 菜谱 做法"
+
+    @staticmethod
+    def _build_job_llm(job: IngestionJob) -> LLMProvider:
+        """按任务记录的供应商/模型构造 LLM Provider（缺省回落配置）。"""
+        provider = job.llm_provider or settings.LLM_PROVIDER
+        if provider == "anthropic":
+            model = job.llm_model or settings.ANTHROPIC_LLM_MODEL
+        else:
+            model = job.llm_model or settings.LLM_MODEL
+        return build_llm_provider(provider, model)
 
     # ------------------------------------------------------------------ #
     # 落库
@@ -513,9 +534,36 @@ class AiCollectionService:
             page_size=page_size,
         )
 
+    def list_models(self) -> LLMModelsResponse:
+        """可用模型列表：Ollama 在线且支持文本生成的模型 + Anthropic 可选。"""
+        models: List[LLMModelOption] = []
+        try:
+            for name in OllamaLLMProvider().list_models():
+                models.append(LLMModelOption(provider="ollama", model=name, label=f"本地 {name}"))
+        except LLMUnavailableError:
+            pass  # Ollama 不可达，仅返回 Anthropic（如有）
+
+        if settings.LLM_API_KEY:
+            models.append(LLMModelOption(
+                provider="anthropic",
+                model=settings.ANTHROPIC_LLM_MODEL,
+                label=f"云端 {settings.ANTHROPIC_LLM_MODEL}",
+            ))
+
+        default_provider = settings.LLM_PROVIDER
+        default_model = (
+            settings.ANTHROPIC_LLM_MODEL if default_provider == "anthropic" else settings.LLM_MODEL
+        )
+        return LLMModelsResponse(
+            models=models,
+            default_provider=default_provider,
+            default_model=default_model,
+        )
+
     def config_status(self) -> ConfigStatusResponse:
         llm_provider = settings.LLM_PROVIDER
         llm_configured = llm_provider == "ollama" or bool(settings.LLM_API_KEY)
+        llm_model = settings.ANTHROPIC_LLM_MODEL if llm_provider == "anthropic" else settings.LLM_MODEL
         try:
             llm_health = self._llm.health_check()
         except Exception as e:  # noqa: BLE001 - 健康检查吞掉
@@ -524,6 +572,7 @@ class AiCollectionService:
             tavily_configured=bool(settings.TAVILY_API_KEY),
             llm_provider=llm_provider,
             llm_configured=llm_configured,
+            llm_model=llm_model,
             llm_health=llm_health,
         )
 
@@ -609,5 +658,7 @@ class AiCollectionService:
             target_recipe_id=job.target_recipe_id,
             candidates_count=job.candidates_count,
             reason=job.reason,
+            llm_provider=job.llm_provider,
+            llm_model=job.llm_model,
             candidates=[self._candidate_response(db, c) for c in candidates],
         )

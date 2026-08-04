@@ -24,7 +24,8 @@ import type {
   AICollectJob,
   AICollectCandidate,
   AICollectionCreate,
-  AICollectConfigStatus
+  AICollectConfigStatus,
+  LLMModelsResponse
 } from '../types';
 
 const api = axios.create({
@@ -276,7 +277,10 @@ export const aiCollectApi = {
     api.post<any, AICollectCandidate>(`/ai-collect/candidates/${candidateId}/reject`),
 
   configStatus: () =>
-    api.get<any, AICollectConfigStatus>('/ai-collect/config/status')
+    api.get<any, AICollectConfigStatus>('/ai-collect/config/status'),
+
+  listModels: () =>
+    api.get<any, LLMModelsResponse>('/ai-collect/models')
 };
 
 // 入库 API

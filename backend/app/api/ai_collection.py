@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.ai_collection import (
     AICollectionCreate, AICollectionJobResponse, CandidateResponse,
-    ConfigStatusResponse, PaginatedCandidateResponse,
+    ConfigStatusResponse, LLMModelsResponse, PaginatedCandidateResponse,
 )
 from app.services.ai_collection_service import AiCollectionService
 
@@ -68,3 +68,9 @@ def reject_candidate(candidate_id: str, db: Session = Depends(get_db)):
 def config_status():
     """Tavily / LLM 配置状态（前端横幅用）。"""
     return AiCollectionService().config_status()
+
+
+@router.get("/models", response_model=LLMModelsResponse)
+def list_models():
+    """可用 LLM 模型列表（Ollama 在线模型 + 可选 Anthropic）与默认选择。"""
+    return AiCollectionService().list_models()

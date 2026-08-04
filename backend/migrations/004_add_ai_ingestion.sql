@@ -27,6 +27,10 @@ ALTER TABLE ingestion_jobs
 ALTER TABLE ingestion_jobs
     ADD COLUMN IF NOT EXISTS reason TEXT NULL AFTER index_status;
 ALTER TABLE ingestion_jobs
+    ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(20) NULL AFTER reason;
+ALTER TABLE ingestion_jobs
+    ADD COLUMN IF NOT EXISTS llm_model VARCHAR(100) NULL AFTER llm_provider;
+ALTER TABLE ingestion_jobs
     ADD CONSTRAINT fk_ingestion_jobs_target FOREIGN KEY (target_recipe_id) REFERENCES recipes(id);
 
 -- ---------- 候选 + 补全目标 + 审核结果 ----------

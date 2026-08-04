@@ -73,6 +73,21 @@ class OllamaLLMProvider(LLMProvider):
         except Exception as e:  # noqa: BLE001 - Pydantic 校验错误统一包装
             raise LLMValidationError(f"Ollama 输出未通过校验: {e}") from e
 
+    def list_models(self) -> list[str]:
+        """列出 Ollama 已拉取且支持文本生成（completion）的模型名。"""
+        try:
+            resp = self._client.get("/api/tags")
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            raise LLMUnavailableError(f"Ollama 不可达: {e}") from e
+        names = []
+        for m in resp.json().get("models", []):
+            caps = m.get("capabilities") or []
+            name = m.get("name", "")
+            if "completion" in caps and name:
+                names.append(name)
+        return names
+
     def health_check(self) -> dict:
         try:
             resp = self._client.get("/api/tags")
