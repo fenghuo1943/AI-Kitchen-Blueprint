@@ -1,7 +1,15 @@
 <template>
   <div class="recipe-form">
     <div class="header">
-      <h1>{{ isEdit ? '✏️ 编辑菜谱' : '🍳 新建菜谱' }}</h1>
+      <div class="header-left">
+        <button @click="$router.back()" class="btn-back" aria-label="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <h1>{{ isEdit ? '✏️ 编辑菜谱' : '🍳 新建菜谱' }}</h1>
+      </div>
     </div>
 
     <form @submit.prevent="save">
@@ -330,7 +338,23 @@ onMounted(loadData);
 
 <style scoped>
 .recipe-form { padding: 20px; max-width: 800px; margin: 0 auto; }
-.header h1 { margin: 0 0 16px 0; }
+.header-left { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.header-left h1 { margin: 0; }
+/* 返回按钮：向左箭头，蓝色轮廓，透明背景，圆角矩形外形 */
+.btn-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 .card {
   background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
