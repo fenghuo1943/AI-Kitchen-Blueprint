@@ -59,9 +59,9 @@
         <div class="form-group">
           <label>忌口/过敏原</label>
           <div class="checkbox-group">
-            <label v-for="diet in dietOptions" :key="diet" class="checkbox-label">
-              <input type="checkbox" :value="diet" v-model="filters.diet_restrictions" />
-              {{ diet }}
+            <label v-for="diet in dietOptions" :key="diet.value" class="checkbox-label">
+              <input type="checkbox" :value="diet.value" v-model="filters.diet_restrictions" />
+              {{ diet.label }}
             </label>
           </div>
         </div>
@@ -153,7 +153,14 @@ const filters = reactive({
 });
 
 const equipmentOptions = ['快炒', '炖煮', '烤箱', '微波炉', '空气炸锅', '蒸锅'];
-const dietOptions = ['gluten', 'dairy', 'eggs', 'nuts', 'soy', 'seafood'];
+const dietOptions = [
+  { value: 'gluten', label: '麸质' },
+  { value: 'dairy', label: '乳制品' },
+  { value: 'eggs', label: '鸡蛋' },
+  { value: 'nuts', label: '坚果' },
+  { value: 'soy', label: '大豆' },
+  { value: 'seafood', label: '海鲜' }
+];
 const goalOptions = ['简单', '快速', '控脂', '低卡', '高蛋白', '暖胃'];
 
 function addIngredient() {
@@ -312,15 +319,23 @@ h1 {
   gap: 12px;
 }
 
-.checkbox-label {
-  display: flex;
+.form-group .checkbox-label {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 14px;
   color: #555;
   cursor: pointer;
-  min-height: 44px;
-  padding: 8px 0;
+  min-height: 24px;
+  padding: 2px 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4a90d9;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .btn {
@@ -528,9 +543,14 @@ h1 {
     gap: 8px;
   }
 
-  .checkbox-label {
-    min-height: 40px;
-    padding: 6px 0;
+  .form-group .checkbox-label {
+    min-height: 22px;
+    padding: 2px 0;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
   }
 
   .btn-large {

@@ -18,6 +18,9 @@
       <!-- 桌面端导航链接 -->
       <div class="nav-links" :class="{ 'mobile-open': isMobileMenuOpen }" v-if="!isMobile || isMobileMenuOpen">
         <router-link to="/recipes" @click="closeMobileMenu">菜谱库</router-link>
+        <router-link to="/menu" @click="closeMobileMenu">菜单</router-link>
+        <router-link to="/discover" @click="closeMobileMenu">发现</router-link>
+        <router-link to="/me" @click="closeMobileMenu">我的</router-link>
         <router-link to="/inventory" @click="closeMobileMenu">库存管理</router-link>
         <router-link to="/recommend" @click="closeMobileMenu">智能推荐</router-link>
         <router-link to="/rag" @click="closeMobileMenu">AI 检索</router-link>
