@@ -25,7 +25,9 @@ import type {
   AICollectCandidate,
   AICollectionCreate,
   AICollectConfigStatus,
-  LLMModelsResponse
+  LLMModelsResponse,
+  BrowserStatus,
+  BrowserFetch
 } from '../types';
 
 const api = axios.create({
@@ -280,7 +282,21 @@ export const aiCollectApi = {
     api.get<any, AICollectConfigStatus>('/ai-collect/config/status'),
 
   listModels: () =>
-    api.get<any, LLMModelsResponse>('/ai-collect/models')
+    api.get<any, LLMModelsResponse>('/ai-collect/models'),
+
+  // 浏览器抓取（Playwright，小红书登录墙）：登录态持久化 + 同步抓正文
+  browserStatus: () =>
+    api.get<any, BrowserStatus>('/ai-collect/browser/status'),
+
+  browserLogin: (url?: string) =>
+    api.post<any, { ok: boolean; message: string }>(
+      '/ai-collect/browser/login',
+      url ? { url } : {},
+      { timeout: 360000 }  // 阻塞到用户关闭浏览器窗口
+    ),
+
+  browserFetch: (url: string) =>
+    api.post<any, BrowserFetch>('/ai-collect/browser/fetch', { url }, { timeout: 120000 })
 };
 
 // 入库 API

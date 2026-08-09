@@ -277,6 +277,20 @@ export interface AICollectConfigStatus {
   default_search_sites: string[];
 }
 
+// 浏览器抓取（Playwright，小红书等登录墙站点）
+export interface BrowserStatus {
+  enabled: boolean;
+  available: boolean;
+  reason: string;
+  profile_exists: boolean;
+}
+
+export interface BrowserFetch {
+  url: string;
+  content: string;
+  error?: string;
+}
+
 // 收藏相关
 export interface FavoriteItem {
   id: string;

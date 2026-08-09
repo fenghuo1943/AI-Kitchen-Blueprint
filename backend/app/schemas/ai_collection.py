@@ -82,3 +82,34 @@ class ConfigStatusResponse(BaseModel):
     llm_model: Optional[str] = None
     llm_health: Dict = {}
     default_search_sites: List[str] = Field(default_factory=list, description="全局默认限定搜索的域名列表")
+
+
+class BrowserStatusResponse(BaseModel):
+    """浏览器抓取（Playwright）配置状态（前端手动模式提示用）"""
+    enabled: bool = Field(..., description="总开关 BROWSER_FETCH_ENABLED 是否开启")
+    available: bool = Field(..., description="当前环境是否可用（开关 + playwright 已装 + 有浏览器）")
+    reason: str = Field("", description="不可用原因")
+    profile_exists: bool = Field(False, description="登录态 profile 目录是否已存在（是否登录过）")
+
+
+class BrowserLoginRequest(BaseModel):
+    """浏览器登录请求"""
+    url: str = Field("https://www.xiaohongshu.com", description="要登录的站点 URL，默认小红书首页")
+
+
+class BrowserLoginResponse(BaseModel):
+    """浏览器登录响应"""
+    ok: bool
+    message: str = ""
+
+
+class BrowserFetchRequest(BaseModel):
+    """浏览器抓取请求"""
+    url: str = Field(..., description="要抓取的页面 URL（支持小红书 xhslink.com 短链）")
+
+
+class BrowserFetchResponse(BaseModel):
+    """浏览器抓取响应"""
+    url: str
+    content: str = Field("", description="清洗后的页面正文")
+    error: Optional[str] = None

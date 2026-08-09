@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     AI_COLLECT_CONCURRENCY: int = 1     # 本地小模型串行，避免压垮 Ollama
     AI_COLLECT_SEARCH_SITES: str = ""   # 默认限定搜索的站点域名，逗号分隔；留空=全网
 
+    # 浏览器抓取（Playwright，用于小红书等登录墙/反爬站点）
+    # Tavily extract 是模拟普通爬虫，登录墙页面拿不到正文；开启后由本地浏览器
+    # （复用专属 profile 的登录态）兜底抓取。有 Chrome/Edge 无需 playwright install。
+    BROWSER_FETCH_ENABLED: bool = True       # 总开关；登录墙页面抓取失败时用本地浏览器兜底
+    BROWSER_USER_DATA_DIR: str = "./data/browser_profile"  # 持久化浏览器用户目录（登录态存这里）
+    BROWSER_HEADED: bool = True              # 有头模式（低风控识别，允许手动过验证码）
+    BROWSER_CHANNEL: str = ""                # chrome/msedge/chromium；留空自动探测
+    BROWSER_LAUNCH_TIMEOUT: int = 60000      # 页面加载等待上限（毫秒）
+
     # RAG 配置
     VECTOR_STORE_TYPE: str = "chroma"
     VECTOR_STORE_PATH: str = "./data/chroma"

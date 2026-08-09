@@ -40,15 +40,30 @@
           v-model="form.manual_url"
           class="manual-url"
           type="text"
-          placeholder="来源页面 URL，如 https://www.xiaohongshu.com/explore/xxx"
+          placeholder="来源页面 URL，如 https://www.xiaohongshu.com/explore/xxx 或 xhslink.com 短链"
         />
+        <div class="manual-tools">
+          <button class="btn btn-secondary btn-small" :disabled="browserBusy || !browserStatus?.available" @click="browserLogin">
+            {{ browserBusy ? '等待登录…' : '浏览器登录' }}
+          </button>
+          <button class="btn btn-secondary btn-small" :disabled="fetchingUrl || !browserStatus?.available || !form.manual_url.trim()" @click="autoFetch">
+            {{ fetchingUrl ? '抓取中…' : '浏览器自动抓取' }}
+          </button>
+        </div>
         <textarea
           v-model="form.manual_content"
           class="manual-content"
           rows="8"
-          placeholder="从网页复制正文粘贴到这里（食材、做法等）…"
+          placeholder="从网页复制正文粘贴到这里（食材、做法等）；也可粘贴小红书「分享→复制链接」的整段文本，链接会自动填入上方 URL…"
+          @input="detectUrlFromContent"
         ></textarea>
-        <p class="hint">适用于登录墙/反爬站点（如小红书）：在自己浏览器里打开页面、复制正文粘贴。将直接用所选 LLM 抽取为菜谱候选，无需 Tavily。</p>
+        <p class="hint">
+          适用于登录墙/反爬站点（如小红书）：浏览器里打开页面 → 点「分享」→「复制链接」，复制出的文本会带正文，直接粘贴到上方即可（链接自动识别）；
+          或填 URL 后点「浏览器自动抓取」，用你自己的登录态自动取正文。将直接用所选 LLM 抽取为菜谱候选，无需 Tavily。
+        </p>
+        <p v-if="browserStatus && !browserStatus.available" class="browser-hint">
+          浏览器抓取不可用：{{ browserStatus.reason || '未开启' }}
+        </p>
         <button class="btn btn-primary" :disabled="submitting || polling" @click="submit">
           {{ submitting ? '提交中…' : (polling ? '采集中…' : '提交总结') }}
         </button>
@@ -216,7 +231,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { aiCollectApi, recipeApi } from '../services/api';
 import { toast } from '../composables/useToast';
-import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, LLMModelOption, Recipe } from '../types';
+import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, BrowserStatus, LLMModelOption, Recipe } from '../types';
 
 const router = useRouter();
 
@@ -283,6 +298,65 @@ const submitting = ref(false);
 const job = ref<AICollectJob | null>(null);
 const polling = ref(false);
 let pollTimer: number | undefined;
+
+// ---- 浏览器抓取（Playwright，小红书登录墙） ----
+const browserStatus = ref<BrowserStatus | null>(null);
+const browserBusy = ref(false);
+const fetchingUrl = ref(false);
+
+async function loadBrowserStatus() {
+  try {
+    browserStatus.value = await aiCollectApi.browserStatus();
+  } catch (e) {
+    console.error('load browser status failed', e);
+  }
+}
+
+async function browserLogin() {
+  browserBusy.value = true;
+  try {
+    toast('已打开浏览器，请在窗口内登录小红书后关闭窗口');
+    const res = await aiCollectApi.browserLogin('https://www.xiaohongshu.com');
+    toast(res.message || '登录完成，登录态已保存');
+  } catch (e: any) {
+    console.error('browser login failed', e);
+    toast(e?.response?.data?.detail || '浏览器登录失败', 'error');
+  } finally {
+    browserBusy.value = false;
+  }
+}
+
+async function autoFetch() {
+  const url = form.value.manual_url.trim();
+  if (!url) {
+    toast('请先填写来源 URL', 'error');
+    return;
+  }
+  fetchingUrl.value = true;
+  try {
+    const res = await aiCollectApi.browserFetch(url);
+    if (res.content) {
+      form.value.manual_content = res.content;
+      toast('已自动抓取正文，请确认后提交总结');
+    } else {
+      toast(res.error || '未能抓取到正文', 'error');
+    }
+  } catch (e: any) {
+    console.error('browser fetch failed', e);
+    toast(e?.response?.data?.detail || '浏览器抓取失败', 'error');
+  } finally {
+    fetchingUrl.value = false;
+  }
+}
+
+/** 从粘贴文本识别小红书链接（「分享→复制链接」的文本带正文+短链），URL 为空时自动填入 */
+function detectUrlFromContent() {
+  if (form.value.manual_url.trim()) return;
+  const m = form.value.manual_content.match(/https?:\/\/(?:xhslink\.com\/\S+|www\.xiaohongshu\.com\/\S+)/);
+  if (m) {
+    form.value.manual_url = m[0].replace(/[，。；,.;]+$/, '');
+  }
+}
 
 const candidates = ref<AICollectCandidate[]>([]);
 const candidateTargets = ref<Recipe[]>([]);
@@ -516,6 +590,7 @@ onMounted(() => {
   loadConfig();
   loadModels();
   loadPending();
+  loadBrowserStatus();
 });
 onUnmounted(stopPolling);
 </script>
@@ -572,6 +647,11 @@ onUnmounted(stopPolling);
   width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
   font-size: 14px; min-height: 40px; margin-bottom: 8px; background: white;
   box-sizing: border-box;
+}
+.manual-tools { display: flex; gap: 8px; margin-bottom: 8px; }
+.browser-hint {
+  margin: 8px 0 0; font-size: 12px; color: #c05621; background: #fff7ed;
+  border-radius: 6px; padding: 6px 10px;
 }
 .manual-content {
   width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;

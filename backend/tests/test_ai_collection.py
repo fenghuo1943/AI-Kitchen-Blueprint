@@ -25,6 +25,7 @@ from app.llm.prompts import (
 )
 from app.llm.schema import sanitize_schema_for_anthropic
 from app.services.ai_collection_service import AiCollectionService
+from app.services.browser_fetcher import BrowserFetchError
 from app.services.tavily_client import TavilySearchResult, TavilyUnavailableError
 
 
@@ -104,10 +105,31 @@ class SequencedLLM(LLMProvider):
         return {"ok": True, "model_available": True, "detail": "fake"}
 
 
-def make_service(tavily=None, llm=None) -> AiCollectionService:
+class FakeBrowser:
+    """记录 fetch 调用并返回可配置正文；available 可关。"""
+
+    def __init__(self, content="浏览器抓到的正文……", available=True):
+        self.content = content
+        self._available = available
+        self.fetch_urls = []
+
+    def available(self):
+        if self._available:
+            return (True, "")
+        return (False, "fake unavailable")
+
+    def fetch(self, url):
+        self.fetch_urls.append(url)
+        if not self.content:
+            raise BrowserFetchError("正文为空")
+        return self.content
+
+
+def make_service(tavily=None, llm=None, browser=None) -> AiCollectionService:
     return AiCollectionService(
         tavily=tavily or FakeTavily(),
         llm=llm or FakeLLM(make_recipe()),
+        browser=browser,
     )
 
 
@@ -735,6 +757,46 @@ def test_collect_handles_page_failure(db_session, no_enqueue, tavily_key):
     db_session.refresh(job)
     assert job.candidates_count == 1
     assert "抽取失败" in (job.reason or "")
+
+
+def test_collect_browser_fallback_for_login_wall(db_session, no_enqueue, tavily_key):
+    """登录墙站点（小红书）：Tavily 抓取失败 → 浏览器兜底抓到正文 → 产出候选。"""
+    wall_url = "https://www.xiaohongshu.com/explore/abc123"
+    browser = FakeBrowser()
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("凉拌黄瓜", wall_url, "c", 0.9)],
+            pages=([], [{"url": wall_url, "error": "login required"}]),
+        ),
+        llm=FakeLLM(make_recipe("凉拌黄瓜", wall_url)),
+        browser=browser,
+    )
+    job = make_job(db_session, request_text="凉拌黄瓜")
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert browser.fetch_urls == [wall_url]  # 浏览器被调用
+    assert job.candidates_count == 1
+
+
+def test_collect_browser_skips_non_login_wall(db_session, no_enqueue, tavily_key):
+    """非登录墙站点：Tavily 失败不会触发浏览器兜底。"""
+    url = "https://example.com/bad"
+    browser = FakeBrowser()
+    service = make_service(
+        tavily=FakeTavily(
+            results=[TavilySearchResult("某菜", url, "c", 0.9)],
+            pages=([], [{"url": url, "error": "boom"}]),
+        ),
+        llm=FakeLLM(make_recipe()),
+        browser=browser,
+    )
+    job = make_job(db_session)
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert browser.fetch_urls == []  # 非登录墙站点不兜底
+    assert job.candidates_count == 0
 
 
 def test_collect_consolidates_multiple_sources(db_session, no_enqueue, tavily_key):

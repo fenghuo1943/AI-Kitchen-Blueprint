@@ -47,6 +47,7 @@ from app.schemas.ai_collection import (
     ConfigStatusResponse, LLMModelOption, LLMModelsResponse,
     PaginatedCandidateResponse,
 )
+from app.services.browser_fetcher import BrowserFetchError, BrowserFetcher
 from app.services.tavily_client import TavilyClient, TavilyUnavailableError, clean_page_text
 from app.tasks import executor
 
@@ -56,10 +57,17 @@ logger = logging.getLogger(__name__)
 class AiCollectionService:
     """AI 采集服务类。构造注入 tavily/llm，测试可换 fake。"""
 
-    def __init__(self, tavily: Optional[TavilyClient] = None, llm: Optional[LLMProvider] = None):
+    def __init__(
+        self,
+        tavily: Optional[TavilyClient] = None,
+        llm: Optional[LLMProvider] = None,
+        browser: Optional[BrowserFetcher] = None,
+    ):
         self._tavily = tavily or TavilyClient()
         self._llm_injected = llm is not None
         self._llm = llm or get_llm_provider()
+        # 登录墙站点（如小红书）浏览器兜底抓取；测试可注入 FakeBrowser
+        self._browser = browser or BrowserFetcher()
 
     # ------------------------------------------------------------------ #
     # 提交任务
@@ -220,8 +228,9 @@ class AiCollectionService:
         for f in pages_failed:
             logger.warning("任务 %s:   抓取失败 %s: %s", job_id, f.get("url"), f.get("error"))
 
-        # 清洗正文，剔除空页
+        # 清洗正文，剔除空页；登录墙站点（如小红书）Tavily 抓不到正文 → 浏览器兜底
         pages = []
+        browser_urls = []
         for page in pages_ok:
             url = page.get("url") or ""
             raw = clean_page_text(page.get("raw_content", ""))
@@ -229,6 +238,16 @@ class AiCollectionService:
                 pages.append((url, raw))
             elif url:
                 logger.warning("任务 %s:   页面 %s 正文为空，跳过", job_id, url)
+                if self._is_login_walled_host(url):
+                    browser_urls.append(url)
+        for failed in pages_failed:
+            url = failed.get("url") or ""
+            if url and self._is_login_walled_host(url):
+                browser_urls.append(url)
+        for url in browser_urls:
+            raw = self._browser_fallback(db, job, url)
+            if raw:
+                pages.append((url, raw))
 
         # 任务可指定供应商/模型（用户在前端选择），否则用服务默认/配置
         llm = self._llm if self._llm_injected else self._build_job_llm(job)
@@ -330,6 +349,24 @@ class AiCollectionService:
             logger.warning("任务 %s: 手动来源抽取结果未通过校验", job.id)
             self._finish(db, job, error_code="EXTRACTION_FAILED")
 
+    def _browser_fallback(self, db: Session, job: IngestionJob, url: str) -> Optional[str]:
+        """用本地浏览器（复用登录态）兜底抓取登录墙页面正文；失败/不可用返回 None。"""
+        if not settings.BROWSER_FETCH_ENABLED:
+            return None
+        ok, reason = self._browser.available()
+        if not ok:
+            logger.info("任务 %s: 浏览器兜底不可用（%s），跳过 %s", job.id, reason, url)
+            return None
+        try:
+            raw = self._browser.fetch(url)
+        except BrowserFetchError as e:
+            msg = f"[{url}] 浏览器兜底抓取失败: {e}\n"
+            logger.warning("任务 %s: %s", job.id, msg.strip())
+            job.reason = (job.reason or "") + msg
+            return None
+        logger.info("任务 %s: 浏览器兜底抓到 %s 正文 %d 字", job.id, url, len(raw))
+        return raw
+
     def _build_search_query(self, db: Session, job: IngestionJob) -> str:
         """按模式构造搜索查询。"""
         text = (job.request_text or "").strip()
@@ -375,6 +412,15 @@ class AiCollectionService:
             if qp in lowered:
                 return True
         return False
+
+    @staticmethod
+    def _is_login_walled_host(url: str) -> bool:
+        """登录墙/反爬站点 host 判断（Tavily extract 拿不到正文，需浏览器兜底）。"""
+        try:
+            host = urlparse(url).netloc.lower()
+        except ValueError:
+            return False
+        return any(host == d or host.endswith("." + d) for d in ("xiaohongshu.com", "xhslink.com"))
 
     @staticmethod
     def _normalize_sites(sites) -> List[str]:
