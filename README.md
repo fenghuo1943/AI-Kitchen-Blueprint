@@ -40,8 +40,8 @@ npm run dev
 
 ### 访问服务
 
-- API 文档：http://localhost:8000/docs
-- 健康检查：http://localhost:8000/health
+- API 文档：http://localhost:8001/docs
+- 健康检查：http://localhost:8001/health
 
 ## 功能模块
 

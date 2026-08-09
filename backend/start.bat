@@ -44,4 +44,4 @@ echo 按 Ctrl+C 停止服务器
 echo.
 
 REM 启动服务
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001

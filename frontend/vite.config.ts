@@ -9,7 +9,8 @@ export default defineConfig({
       '/api': {
         // 用 127.0.0.1 而非 localhost：Windows 上 localhost 可能优先解析到 IPv6(::1)，
         // 而后端 uvicorn 只监听 IPv4(0.0.0.0)，会导致代理请求 503/空响应
-        target: 'http://127.0.0.1:8000',
+        // 端口 8001：8000 被 SillyTavern(server.js) 的 127.0.0.1:8000 占用，会遮蔽本后端
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true
       }
     }

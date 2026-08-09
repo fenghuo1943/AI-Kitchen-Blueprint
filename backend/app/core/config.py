@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
 
-    # 服务器配置
+    # 服务器配置（8001：8000 被 SillyTavern 的 127.0.0.1:8000 占用，遮蔽本后端）
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8001
 
     # 数据库配置 (MariaDB)
     DB_HOST: str = "192.168.31.146"
