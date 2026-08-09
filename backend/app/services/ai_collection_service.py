@@ -24,8 +24,8 @@ from app.core.pinyin import to_pinyin
 from app.db.database import get_db_context
 from app.db.models import (
     IngestionCandidate, IngestionJob, Ingredient, Recipe,
-    RecipeIngredient, RecipeRevision, RecipeSource, RecipeStep,
-    RecipeTag, Tag,
+    RecipeIngredient, RecipeRevision, RecipeSeasoning, RecipeSource,
+    RecipeStep, RecipeTag, Seasoning, Tag,
 )
 from app.llm import (
     LLMProvider, LLMUnavailableError, LLMValidationError,
@@ -41,6 +41,7 @@ from app.repositories.ai_collection_repository import AICollectionRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.recipe_repository import RecipeRepository
+from app.repositories.seasoning_repository import SeasoningRepository
 from app.schemas.ai_collection import (
     AICollectionCreate, AICollectionJobResponse, CandidateResponse,
     ConfigStatusResponse, LLMModelOption, LLMModelsResponse,
@@ -435,9 +436,9 @@ class AiCollectionService:
         self._persist_candidate(db, job, recipe, urls, dedup_key, match_scores)
         job.candidates_count += 1
         logger.info(
-            "任务 %s: 候选入库 title=%r 食材%d 步骤%d urls=%s",
+            "任务 %s: 候选入库 title=%r 食材%d 调料%d 步骤%d urls=%s",
             job.id, recipe["title"], len(recipe.get("ingredients", [])),
-            len(recipe.get("steps", [])), urls,
+            len(recipe.get("seasonings", [])), len(recipe.get("steps", [])), urls,
         )
         db.commit()
         return True
@@ -450,6 +451,8 @@ class AiCollectionService:
 
         urls 为该候选参考的全部来源 URL：逐个建 RecipeSource（raw_hash 去重生效），
         主来源（第一个）写入 recipe/candidate.source_id，全部 URL 记录到 source_urls_json。
+        食材/调料已由 validate_recipe_reason 拆好；此处再用调料表兜底一次（静态词典
+        未覆盖、但调料表中已维护的名字），然后把调料落为 RecipeSeasoning 关联。
         """
         source_rows = []
         for url in urls:
@@ -485,8 +488,25 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
+        # 调料兜底：静态词典未覆盖、但调料表中已维护的名字（用户手工新增的调料）→ 拆到调料
+        seasoning_repo = SeasoningRepository(db)
+        known_seasonings = {s.canonical_name for s in seasoning_repo.list_all()}
+        ingredients = recipe.get("ingredients", [])
+        seasonings = list(recipe.get("seasonings", []) or [])
+        seen_seasonings = {s["name"] for s in seasonings if s.get("name")}
+        residual = []
+        for ing in ingredients:
+            name = (ing.get("name") or "").strip()
+            if name and name in known_seasonings and name not in seen_seasonings:
+                seasonings.append(ing)
+                seen_seasonings.add(name)
+            else:
+                residual.append(ing)
+        recipe["ingredients"] = residual
+        recipe["seasonings"] = seasonings
+
         ingredient_repo = IngredientRepository(db)
-        for i, ing in enumerate(recipe.get("ingredients", [])):
+        for i, ing in enumerate(recipe["ingredients"]):
             name = (ing.get("name") or "").strip()
             if not name:
                 continue
@@ -507,6 +527,25 @@ class AiCollectionService:
                 preparation=ing.get("preparation"),
                 optional=1 if ing.get("optional") else 0,
                 sort_order=i,
+            ))
+
+        # 调料：查找或创建 Seasoning，落 RecipeSeasoning 关联（按名去重，表上有唯一约束）
+        for ing in recipe["seasonings"]:
+            name = (ing.get("name") or "").strip()
+            if not name:
+                continue
+            seasoning = seasoning_repo.get_by_name(name)
+            if not seasoning:
+                seasoning = Seasoning(
+                    id=str(uuid.uuid4()), canonical_name=name, pinyin=to_pinyin(name)
+                )
+                db.add(seasoning)
+                db.flush()
+            db.add(RecipeSeasoning(
+                id=str(uuid.uuid4()),
+                recipe_id=cand_recipe.id,
+                seasoning_id=seasoning.id,
+                quantity=self._seasoning_quantity(ing),
             ))
 
         for step in recipe.get("steps", []):
@@ -542,6 +581,18 @@ class AiCollectionService:
         )
         db.add(candidate)
         db.flush()
+
+    @staticmethod
+    def _seasoning_quantity(ing: dict) -> Optional[str]:
+        """把调料条目的用量整理成字符串（优先原始文本，其次 数值+单位）。"""
+        raw = (ing.get("raw_quantity") or ing.get("amount") or "").strip()
+        if raw:
+            return raw
+        q = ing.get("quantity")
+        u = ing.get("unit")
+        if q is not None and u:
+            return f"{q}{u}"
+        return str(q) if q is not None else None
 
     @staticmethod
     def _add_tags(db: Session, recipe_id: str, tags: List[str]) -> None:
@@ -685,6 +736,21 @@ class AiCollectionService:
                 ))
                 existing_names.add(name)
                 next_order += 1
+
+        # 调料：按 canonical_name 去重追加
+        existing_seasonings = {
+            rs.seasoning.canonical_name for rs in target.recipe_seasonings if rs.seasoning
+        }
+        for rs in cand_recipe.recipe_seasonings:
+            name = rs.seasoning.canonical_name if rs.seasoning else ""
+            if name and name not in existing_seasonings:
+                db.add(RecipeSeasoning(
+                    id=str(uuid.uuid4()),
+                    recipe_id=target.id,
+                    seasoning_id=rs.seasoning_id,
+                    quantity=rs.quantity,
+                ))
+                existing_seasonings.add(name)
 
         # 步骤：target 无则全量复制，有则追加不重复
         target_steps = sorted(target.recipe_steps, key=lambda s: s.step_no)

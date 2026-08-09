@@ -15,12 +15,13 @@ import pytest
 from app.core.config import settings
 from app.db.models import (
     IngestionCandidate, IngestionJob, Recipe, RecipeIngredient,
-    RecipeRevision, RecipeSource, RecipeStep,
+    RecipeRevision, RecipeSeasoning, RecipeSource, RecipeStep, Seasoning,
 )
 from app.llm import LLMProvider, LLMUnavailableError, LLMValidationError
 from app.llm.factory import default_model_for
 from app.llm.prompts import (
-    RecipeExtraction, extract_recipe_from_sources, extract_recipe_with_fix, normalize_title,
+    RecipeExtraction, extract_recipe_from_sources, extract_recipe_with_fix,
+    normalize_title, validate_recipe_reason,
 )
 from app.llm.schema import sanitize_schema_for_anthropic
 from app.services.ai_collection_service import AiCollectionService
@@ -899,6 +900,127 @@ def _persist_candidate_for(db, job, recipe=None):
     service._persist_candidate(db, job, recipe, [recipe["source_url"]], dedup, {})
     db.commit()
     return db.query(IngestionCandidate).filter_by(job_id=job.id).first()
+
+
+# ------------------------------------------------------------------ #
+# 调料拆分：把食材中的调料自动归入调料
+# ------------------------------------------------------------------ #
+def test_validate_recipe_reason_splits_seasonings():
+    recipe = {
+        "title": "西红柿炒鸡蛋",
+        "ingredients": [
+            {"name": "西红柿", "amount": "2个"},
+            {"name": "盐", "amount": "适量"},
+            {"name": "鸡蛋", "amount": "3个"},
+            {"name": "生抽", "amount": "1勺"},
+        ],
+        "steps": [{"step_no": 1, "instruction": "炒"}],
+    }
+    assert validate_recipe_reason(recipe) is None
+    assert [i["name"] for i in recipe["ingredients"]] == ["西红柿", "鸡蛋"]
+    assert [s["name"] for s in recipe["seasonings"]] == ["盐", "生抽"]
+
+
+def test_validate_recipe_reason_merges_llm_seasonings_and_dedup():
+    """LLM 显式输出的 seasonings 并入；食材中重复的调料去重。"""
+    recipe = {
+        "title": "红烧肉",
+        "ingredients": [
+            {"name": "五花肉", "amount": "500克"},
+            {"name": "冰糖", "amount": "20克"},   # 模型放错位置 → 词典拆出
+            {"name": "酱油", "amount": "2勺"},    # 与 seasonings 重复 → 只留一条
+        ],
+        "seasonings": [
+            {"name": "酱油", "amount": "2勺"},
+            {"name": "料酒", "amount": "1勺"},
+        ],
+        "steps": [{"step_no": 1, "instruction": "炖"}],
+    }
+    assert validate_recipe_reason(recipe) is None
+    assert [i["name"] for i in recipe["ingredients"]] == ["五花肉"]
+    assert [s["name"] for s in recipe["seasonings"]] == ["冰糖", "酱油", "料酒"]
+
+
+def test_validate_recipe_reason_all_seasonings_fails():
+    """全是调料的清单不算一道菜。"""
+    recipe = {
+        "title": "蘸料",
+        "ingredients": [{"name": "盐"}, {"name": "生抽"}],
+        "steps": [{"step_no": 1, "instruction": "混合"}],
+    }
+    assert validate_recipe_reason(recipe) == "无食材"
+
+
+def test_persist_candidate_creates_seasoning_links(db_session, no_enqueue, tavily_key):
+    """走真实流水线（先 validate 拆分再落库）：调料进 recipe_seasonings，食材留在 ingredients。"""
+    job = make_job(db_session)
+    recipe = make_recipe()
+    recipe["ingredients"].extend([
+        {"name": "盐", "quantity": "适量"},
+        {"name": "生抽", "quantity": "1", "unit": "勺"},
+        {"name": "洋葱"},  # 含"葱"子串但是食材 → 保留在食材
+    ])
+    assert validate_recipe_reason(recipe) is None
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    ings = db_session.query(RecipeIngredient).filter_by(recipe_id=candidate.recipe_id).all()
+    assert {ri.ingredient.canonical_name for ri in ings} == {"西红柿", "鸡蛋", "洋葱"}
+    seas = db_session.query(RecipeSeasoning).filter_by(recipe_id=candidate.recipe_id).all()
+    assert {s.seasoning.canonical_name for s in seas} == {"盐", "生抽"}
+    # 调料表中自动建了 Seasoning 记录
+    assert db_session.query(Seasoning).filter(Seasoning.canonical_name == "生抽").first() is not None
+    # 候选核心食材不含调料
+    assert json.loads(candidate.core_ingredients_json) == ["西红柿", "鸡蛋", "洋葱"]
+
+
+def test_persist_candidate_db_fallback_moves_user_seasonings(db_session, no_enqueue, tavily_key):
+    """调料表里已有、但静态词典未覆盖的名字（用户手工维护）→ 落库时兜底拆到调料。"""
+    db_session.add(Seasoning(
+        id=str(uuid.uuid4()), canonical_name="鱼籽酱", pinyin="yuzijiang"
+    ))
+    db_session.commit()
+
+    job = make_job(db_session)
+    recipe = make_recipe()
+    recipe["ingredients"].append({"name": "鱼籽酱", "quantity": "1勺"})
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    ings = db_session.query(RecipeIngredient).filter_by(recipe_id=candidate.recipe_id).all()
+    assert {ri.ingredient.canonical_name for ri in ings} == {"西红柿", "鸡蛋"}
+    seas = db_session.query(RecipeSeasoning).filter_by(recipe_id=candidate.recipe_id).all()
+    assert {s.seasoning.canonical_name for s in seas} == {"鱼籽酱"}
+
+
+def test_approve_merge_merges_seasonings(db_session, no_enqueue, tavily_key):
+    """补全模式合入时，候选的调料也并入目标（按名去重）。"""
+    target = Recipe(id=str(uuid.uuid4()), title="西红柿炒鸡蛋", status="draft", revision=1)
+    db_session.add(target)
+    db_session.commit()
+
+    job = make_job(db_session, mode="complete", request_text="西红柿炒鸡蛋", target_id=target.id)
+    recipe = make_recipe()
+    recipe["ingredients"].append({"name": "盐", "quantity": "适量"})
+    assert validate_recipe_reason(recipe) is None
+    candidate = _persist_candidate_for(db_session, job, recipe)
+
+    make_service().review_candidate(db_session, candidate.id, "approve")
+
+    db_session.refresh(target)
+    seas = db_session.query(RecipeSeasoning).filter_by(recipe_id=target.id).all()
+    assert {s.seasoning.canonical_name for s in seas} == {"盐"}
+    # 食材并入后候选软删，目标食材包含候选真实食材
+    ings = db_session.query(RecipeIngredient).filter_by(recipe_id=target.id).all()
+    assert {ri.ingredient.canonical_name for ri in ings} == {"西红柿", "鸡蛋"}
 
 
 def test_approve_new_publishes(db_session, no_enqueue, tavily_key):

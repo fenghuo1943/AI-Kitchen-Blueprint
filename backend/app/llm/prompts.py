@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.seasoning_classifier import is_seasoning
 from app.llm.base import LLMProvider, LLMValidationError
 
 
@@ -38,7 +39,10 @@ class RecipeExtraction(BaseModel):
     prep_minutes: Optional[int] = Field(None, description="准备时间(分钟)")
     cook_minutes: Optional[int] = Field(None, description="烹饪时间(分钟)")
     difficulty: Optional[str] = Field(None, description="难度：简单/中等/困难")
-    ingredients: List[RecipeIngredientExtract] = Field(default_factory=list, description="食材列表")
+    ingredients: List[RecipeIngredientExtract] = Field(default_factory=list, description="食材列表（不含调料）")
+    seasonings: List[RecipeIngredientExtract] = Field(
+        default_factory=list, description="调料列表，如 盐/生抽/料酒/花椒/葱姜蒜 等"
+    )
     # 兼容：模型可能输出 [{step_no,instruction},...] 对象数组，也可能输出 ["步骤1",...] 字符串数组
     steps: List[Union["RecipeStepExtract", str]] = Field(default_factory=list, description="步骤列表")
     tags: List[str] = Field(default_factory=list, description="标签，如 家常菜/快手")
@@ -51,10 +55,13 @@ SYSTEM_EXTRACTION_PROMPT = (
     "只输出一个合法 JSON 对象，字段按下面的示例命名。"
     "字段缺失时填 null 或空数组，禁止编造食材用量或步骤。"
     "只针对'食谱、烹饪'主题抽取；素材不含菜谱时输出 {\"title\": \"\"}。\n"
+    "分类规则：盐/糖/酱油/料酒/醋/葱姜蒜/花椒/八角/淀粉 等'调料、香料、"
+    "调味酱汁'放到 seasonings 字段；其余'主料、配菜、肉类、蔬菜'放到 ingredients 字段。\n"
     "输出示例：\n"
     '{"title":"西红柿炒鸡蛋","summary":"经典家常菜","servings":2,"prep_minutes":5,'
     '"cook_minutes":10,"difficulty":"简单",'
     '"ingredients":[{"name":"西红柿","amount":"2个"},{"name":"鸡蛋","amount":"3个"}],'
+    '"seasonings":[{"name":"盐","amount":"适量"},{"name":"葱花","amount":"少许"}],'
     '"steps":[{"step_no":1,"instruction":"西红柿切块"},{"step_no":2,"instruction":"鸡蛋打散炒熟"}],'
     '"tags":["家常菜"],"source_url":"https://example.com/tomato"}'
 )
@@ -114,11 +121,14 @@ SYSTEM_CONSOLIDATE_PROMPT = (
     "4. 只针对'食谱、烹饪'主题整理；没有可用的菜谱信息时输出 {\"title\": \"\"}。\n"
     "5. 只输出一个合法 JSON 对象，字段按下面的示例命名；字段缺失时填 null 或空数组，"
     "禁止编造来源中没有的食材用量或步骤。\n"
-    "6. source_url 填第一个来源的 URL。\n"
+    "6. 盐/糖/酱油/料酒/醋/葱姜蒜/花椒/八角/淀粉 等'调料、香料、调味酱汁'放到 seasonings 字段；"
+    "主料、肉类、蔬菜等放 ingredients 字段。\n"
+    "7. source_url 填第一个来源的 URL。\n"
     "输出示例：\n"
     '{"title":"西红柿炒鸡蛋","summary":"经典家常菜","servings":2,"prep_minutes":5,'
     '"cook_minutes":10,"difficulty":"简单",'
     '"ingredients":[{"name":"西红柿","amount":"2个"},{"name":"鸡蛋","amount":"3个"}],'
+    '"seasonings":[{"name":"盐","amount":"适量"},{"name":"葱花","amount":"少许"}],'
     '"steps":[{"step_no":1,"instruction":"西红柿切块"},{"step_no":2,"instruction":"鸡蛋打散炒熟"}],'
     '"tags":["家常菜"],"source_url":"https://example.com/tomato"}'
 )
@@ -172,39 +182,63 @@ def _split_amount(amount: str):
     return None, None
 
 
+def _normalize_ingredient_item(ing) -> Optional[dict]:
+    """把 {name, amount} / {name, quantity, unit} / 纯字符串 归一为统一 dict；无效条目返回 None。"""
+    if isinstance(ing, str):
+        name = ing.strip()
+        if not name:
+            return None
+        return {"name": name, "quantity": None, "unit": None,
+                "raw_quantity": None, "preparation": None, "optional": False}
+    name = (ing.get("name") or "").strip()
+    if not name:
+        return None
+    quantity = ing.get("quantity")
+    unit = ing.get("unit")
+    amount = ing.get("amount")
+    if not quantity and not unit and amount:
+        quantity, unit = _split_amount(amount)
+    return {
+        "name": name,
+        "quantity": quantity,
+        "unit": unit,
+        "raw_quantity": ing.get("raw_quantity") or amount,
+        "preparation": ing.get("preparation"),
+        "optional": bool(ing.get("optional")),
+    }
+
+
 def validate_recipe_reason(recipe: dict) -> Optional[str]:
     """规则校验与归一化；返回 None 表示通过，否则返回具体失败原因（供日志/任务原因展示）。
-    归一化副作用与 validate_recipe 一致：步骤字符串/对象统一、食材 amount 拆分。"""
+    归一化副作用与 validate_recipe 一致：步骤字符串/对象统一、食材 amount 拆分，
+    并把食材中的调料（盐/酱油/料酒/葱姜蒜等）自动拆到 recipe['seasonings']。"""
     if not recipe.get("title"):
         return "标题为空"
 
-    # 食材：兼容 {name, amount} / {name, quantity, unit} / 纯字符串
+    # 食材/调料：兼容 {name, amount} / {name, quantity, unit} / 纯字符串；
+    # 命中调料词典的条目自动从 ingredients 拆出，LLM 显式输出的 seasonings 并入（按名去重）。
     ingredients = []
+    seasonings = []
+    seen_seasonings = set()
     for ing in recipe.get("ingredients", []):
-        if isinstance(ing, str):
-            name = ing.strip()
-            ingredients.append({"name": name, "quantity": None, "unit": None,
-                                "raw_quantity": None, "preparation": None, "optional": False})
+        item = _normalize_ingredient_item(ing)
+        if not item:
             continue
-        name = (ing.get("name") or "").strip()
-        if not name:
-            continue
-        quantity = ing.get("quantity")
-        unit = ing.get("unit")
-        amount = ing.get("amount")
-        if not quantity and not unit and amount:
-            quantity, unit = _split_amount(amount)
-        ingredients.append({
-            "name": name,
-            "quantity": quantity,
-            "unit": unit,
-            "raw_quantity": ing.get("raw_quantity") or amount,
-            "preparation": ing.get("preparation"),
-            "optional": bool(ing.get("optional")),
-        })
+        if is_seasoning(item["name"]):
+            if item["name"] not in seen_seasonings:
+                seasonings.append(item)
+                seen_seasonings.add(item["name"])
+        else:
+            ingredients.append(item)
+    for ing in recipe.get("seasonings", []):
+        item = _normalize_ingredient_item(ing)
+        if item and item["name"] not in seen_seasonings:
+            seasonings.append(item)
+            seen_seasonings.add(item["name"])
     if not ingredients:
         return "无食材"
     recipe["ingredients"] = ingredients
+    recipe["seasonings"] = seasonings
 
     # 步骤：兼容 {step_no,instruction} 对象数组 / ["步骤",...] 字符串数组
     steps = []
