@@ -1104,6 +1104,35 @@ def _persist_candidate_for(db, job, recipe=None):
 
 
 # ------------------------------------------------------------------ #
+# 用量拆分：约数（2~3个 / 2-3克）与分数（1/2个）不拆坏
+# ------------------------------------------------------------------ #
+@pytest.mark.parametrize("amount,exp_q,exp_u", [
+    ("2~3个", "2~3", "个"),
+    ("2-3个", "2-3", "个"),
+    ("2－3克", "2－3", "克"),
+    ("3至4片", "3至4", "片"),
+    ("1/2个", "1/2", "个"),
+    ("1.5~2斤", "1.5~2", "斤"),
+    ("2个", "2", "个"),
+    ("3 克", "3", "克"),
+    ("适量", None, None),
+])
+def test_validate_recipe_reason_splits_approx_amount(amount, exp_q, exp_u):
+    """约数/分数用量：整个量词留在 quantity，单位单独拆出，不再拆成 ('2','~3个')。"""
+    recipe = {
+        "title": "测试菜",
+        "ingredients": [{"name": "食材", "amount": amount}],
+        "steps": [{"step_no": 1, "instruction": "炒"}],
+    }
+    assert validate_recipe_reason(recipe) is None
+    item = recipe["ingredients"][0]
+    assert item["quantity"] == exp_q
+    assert item["unit"] == exp_u
+    # 原始文本完整保留，避免回显丢失约数
+    assert item["raw_quantity"] == amount
+
+
+# ------------------------------------------------------------------ #
 # 调料拆分：把食材中的调料自动归入调料
 # ------------------------------------------------------------------ #
 def test_validate_recipe_reason_splits_seasonings():

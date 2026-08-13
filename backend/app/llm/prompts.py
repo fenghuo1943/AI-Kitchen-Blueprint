@@ -175,8 +175,15 @@ def extract_recipe_from_sources(llm: LLMProvider, sources: List[tuple]) -> dict:
 
 
 def _split_amount(amount: str):
-    """把 '2个'/'3 克'/'适量' 拆成 (数值, 单位)；无法识别则 (None, None)。"""
-    m = re.match(r"^\s*([\d.]+)\s*(.*?)\s*$", amount or "")
+    """把 '2个'/'3 克'/'2~3个'/'1/2个'/'适量' 拆成 (数值, 单位)；无法识别则 (None, None)。
+
+    数值部分兼容约数与分数：'2~3个' → ('2~3', '个')、'1/2个' → ('1/2', '个')，
+    避免把 '~3个' 这类约数误拆进单位（旧实现会拆成 ('2', '~3个')）。
+    """
+    m = re.match(
+        r"^\s*([\d.]+(?:\s*[~～\-－—至/]\s*[\d.]+)?)\s*(.*?)\s*$",
+        amount or "",
+    )
     if m and m.group(2):
         return m.group(1), m.group(2)
     return None, None
