@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { historyApi, getHouseholdId } from '../services/api';
+import { historyApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { HistoryItem } from '../types';
 
@@ -43,10 +43,8 @@ function formatTime(t: string) {
 }
 
 async function load() {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    const res = await historyApi.list({ household_id: householdId, page: page.value, page_size: pageSize });
+    const res = await historyApi.list({ page: page.value, page_size: pageSize });
     items.value = res.data;
     total.value = res.total;
   } catch (e) {
@@ -55,10 +53,8 @@ async function load() {
 }
 
 async function removeOne(item: HistoryItem) {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    await historyApi.removeOne(item.recipe_id, householdId);
+    await historyApi.removeOne(item.recipe_id);
     toast('已删除该记录');
     load();
   } catch (e) {
@@ -67,11 +63,9 @@ async function removeOne(item: HistoryItem) {
 }
 
 async function clearAll() {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   if (!window.confirm('确定清空全部浏览历史？')) return;
   try {
-    await historyApi.clear(householdId);
+    await historyApi.clear();
     toast('已清空');
     load();
   } catch (e) {

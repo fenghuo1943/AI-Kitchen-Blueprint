@@ -29,7 +29,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { recipeApi, getHouseholdId } from '../services/api';
+import { recipeApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { Recipe } from '../types';
 
@@ -47,7 +47,6 @@ async function load() {
   try {
     const res = await recipeApi.list({
       deleted: true,
-      household_id: getHouseholdId(),
       page: page.value,
       page_size: pageSize
     });

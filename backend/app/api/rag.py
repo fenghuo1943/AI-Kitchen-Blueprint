@@ -8,6 +8,7 @@ from app.rag.retriever import HybridRetriever
 from app.repositories.document_chunk_repository import DocumentChunkRepository
 from app.repositories.recipe_repository import RecipeRepository
 from app.schemas.rag import IndexStatusResponse, RagSearchRequest, RagSearchResponse
+from app.services.household_resolver import resolve_default_household_id
 from app.tasks import executor
 
 router = APIRouter(prefix="/rag", tags=["语义检索"])
@@ -20,6 +21,7 @@ def rag_search(req: RagSearchRequest, db: Session = Depends(get_db)):
     引擎（Ollama/Chroma）不可用时返回 200 + engine_available=False + 可读 error，
     不影响其他接口（RAG 规范：模型不可用不中断核心功能）。
     """
+    req.household_id = req.household_id or resolve_default_household_id(db)
     result = HybridRetriever().retrieve(
         db,
         req.query,

@@ -26,7 +26,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { menuApi, getHouseholdId } from '../services/api';
+import { menuApi } from '../services/api';
 import { toast } from '../composables/useToast';
 
 const props = defineProps<{ recipeId: string }>();
@@ -67,13 +67,8 @@ function close() {
 }
 
 async function confirm() {
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先在「库存管理」中创建/选择家庭', 'error');
-    return;
-  }
   try {
-    await menuApi.add(householdId, props.recipeId, effectiveDate.value);
+    await menuApi.add(props.recipeId, effectiveDate.value);
     toast('已加入菜单');
     close();
   } catch (e: any) {

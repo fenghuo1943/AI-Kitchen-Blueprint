@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_resolved_household_id
 from app.db.database import get_db
 from app.repositories.menu_repository import MenuRepository
 from app.repositories.recipe_repository import RecipeRepository
@@ -21,7 +22,7 @@ def get_menu_service(db: Session = Depends(get_db)) -> MenuService:
 
 @router.get("", response_model=dict)
 def get_menu(
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     date_: str = Query(None, alias="date", description="日期 YYYY-MM-DD（单日模式）"),
     month: str = Query(None, description="月份 YYYY-MM（返回该月有菜单的日期）"),
     mode: str = Query(None, description="waterfall=瀑布流模式"),
@@ -45,7 +46,7 @@ def get_menu(
 @router.post("", status_code=201)
 def add_to_menu(
     data: MealPlanCreate,
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     db: Session = Depends(get_db),
     service: MenuService = Depends(get_menu_service)
 ):
@@ -66,7 +67,7 @@ def add_to_menu(
 def remove_from_menu(
     recipe_id: str,
     date_: str = Query(..., alias="date", description="日期 YYYY-MM-DD"),
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     service: MenuService = Depends(get_menu_service)
 ):
     """删除某天某菜谱"""

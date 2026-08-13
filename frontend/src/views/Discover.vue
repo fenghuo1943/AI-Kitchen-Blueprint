@@ -93,7 +93,7 @@
 import { ref, onMounted } from 'vue';
 import RecipeCard from '../components/RecipeCard.vue';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
-import { discoverApi, favoriteApi, getHouseholdId } from '../services/api';
+import { discoverApi, favoriteApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { DiscoverRecipe, Recipe } from '../types';
 
@@ -120,8 +120,7 @@ function switchTab(key: string) {
 }
 
 async function loadAll() {
-  const householdId = getHouseholdId();
-  const params = { household_id: householdId, limit: 6 };
+  const params = { limit: 6 };
   try {
     const [t, r, h, n] = await Promise.all([
       discoverApi.get({ ...params, type: 'today' }),
@@ -139,9 +138,8 @@ async function loadAll() {
 }
 
 async function loadRandom() {
-  const householdId = getHouseholdId();
   try {
-    const res = await discoverApi.get({ type: 'random', household_id: householdId, limit: 6 });
+    const res = await discoverApi.get({ type: 'random', limit: 6 });
     randomRecipes.value = res.list;
   } catch (e) {
     console.error('load random failed', e);
@@ -149,18 +147,13 @@ async function loadRandom() {
 }
 
 async function toggleFavorite(recipe: Recipe | DiscoverRecipe) {
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先创建/选择家庭（库存管理页）', 'error');
-    return;
-  }
   try {
     if (recipe.is_favorited) {
-      await favoriteApi.remove(recipe.id, householdId);
+      await favoriteApi.remove(recipe.id);
       recipe.is_favorited = false;
       toast('已取消收藏');
     } else {
-      await favoriteApi.add(recipe.id, householdId);
+      await favoriteApi.add(recipe.id);
       recipe.is_favorited = true;
       toast('已收藏');
     }

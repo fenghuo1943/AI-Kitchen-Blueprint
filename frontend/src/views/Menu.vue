@@ -88,7 +88,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { menuApi, getHouseholdId } from '../services/api';
+import { menuApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { MenuByDate } from '../types';
 
@@ -142,11 +142,9 @@ const calendarCells = computed(() => {
 });
 
 async function loadMonth() {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   const month = `${currentYear.value}-${String(currentMonth.value + 1).padStart(2, '0')}`;
   try {
-    const res = await menuApi.getMonthDates(householdId, month);
+    const res = await menuApi.getMonthDates(month);
     monthDates.value = res.dates;
   } catch (e) {
     console.error('load month failed', e);
@@ -162,20 +160,16 @@ function shiftMonth(delta: number) {
 
 async function selectDay(dateStr: string) {
   selectedDate.value = dateStr;
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    dayMenu.value = await menuApi.getByDate(householdId, dateStr);
+    dayMenu.value = await menuApi.getByDate(dateStr);
   } catch (e) {
     console.error('load day failed', e);
   }
 }
 
 async function removeFromDay(recipeId: string) {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    await menuApi.remove(householdId, recipeId, selectedDate.value);
+    await menuApi.remove(recipeId, selectedDate.value);
     toast('已移除');
     selectDay(selectedDate.value);
     loadMonth();
@@ -193,8 +187,6 @@ async function switchWaterfall() {
 // 加载瀑布流：reset=true 时从第一页重新加载，否则追加下一页
 async function loadWaterfall(reset = false) {
   if (loadingMore.value) return;
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   if (!reset && !hasMore.value) return;
   loadingMore.value = true;
   loadError.value = false;
@@ -204,7 +196,7 @@ async function loadWaterfall(reset = false) {
     waterfall.value = [];
   }
   try {
-    const res = await menuApi.getWaterfall(householdId, { page: waterPage.value, page_size: pageSize });
+    const res = await menuApi.getWaterfall({ page: waterPage.value, page_size: pageSize });
     totalPage.value = res.total_page;
     if (reset) {
       waterfall.value = [...res.list];
@@ -247,11 +239,6 @@ function goDetail(id: string) {
 }
 
 onMounted(() => {
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先创建/选择家庭（库存管理页）', 'error');
-    return;
-  }
   window.addEventListener('scroll', onScroll, { passive: true });
   loadMonth();
   selectDay(fmt(today));

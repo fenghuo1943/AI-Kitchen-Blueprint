@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_resolved_household_id
 from app.db.database import get_db
 from app.repositories.discover_repository import DiscoverRepository
 from app.services.discover_service import DiscoverService
@@ -18,7 +19,7 @@ def get_discover_service(db: Session = Depends(get_db)) -> DiscoverService:
 @router.get("", response_model=DiscoverResponse)
 def discover(
     type_: str = Query("today", alias="type", pattern="^(today|hot|new|random)$", description="推荐类型"),
-    household_id: str = Query("", description="家庭ID（用于今日推荐/热门排序）"),
+    household_id: str = Depends(get_resolved_household_id),
     limit: int = Query(6, ge=1, le=50),
     service: DiscoverService = Depends(get_discover_service)
 ):

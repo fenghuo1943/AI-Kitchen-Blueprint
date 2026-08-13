@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { favoriteApi, getHouseholdId } from '../services/api';
+import { favoriteApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { FavoriteItem } from '../types';
 
@@ -42,10 +42,8 @@ function formatTime(t: string) {
 }
 
 async function load() {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    const res = await favoriteApi.list({ household_id: householdId, page: page.value, page_size: pageSize });
+    const res = await favoriteApi.list({ page: page.value, page_size: pageSize });
     items.value = res.data;
     total.value = res.total;
   } catch (e) {
@@ -54,10 +52,8 @@ async function load() {
 }
 
 async function remove(item: FavoriteItem) {
-  const householdId = getHouseholdId();
-  if (!householdId) return;
   try {
-    await favoriteApi.remove(item.recipe_id, householdId);
+    await favoriteApi.remove(item.recipe_id);
     toast('已取消收藏');
     load();
   } catch (e) {

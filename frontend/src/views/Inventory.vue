@@ -5,62 +5,45 @@
       <button @click="showAddModal = true" class="btn btn-primary">添加库存</button>
     </div>
 
-    <div class="household-selector" v-if="!currentHousehold">
-      <p>请先选择或创建家庭：</p>
-      <div class="household-list">
-        <button
-          v-for="h in households"
-          :key="h.id"
-          @click="selectHousehold(h.id)"
-          class="household-btn"
-        >
-          {{ h.name }}
-        </button>
-        <button @click="showCreateHousehold = true" class="household-btn add">+ 新建家庭</button>
+    <div class="expiring-alert" v-if="expiringItems.length > 0">
+      <h3>⚠️ 即将过期</h3>
+      <div class="expiring-list">
+        <div v-for="item in expiringItems" :key="item.id" class="expiring-item">
+          <span class="item-name">{{ item.ingredient_name }}</span>
+          <span class="item-quantity">{{ item.quantity }} {{ item.unit }}</span>
+          <span class="item-expiry">{{ formatDate(item.expires_at) }}</span>
+        </div>
       </div>
     </div>
 
-    <template v-else>
-      <div class="expiring-alert" v-if="expiringItems.length > 0">
-        <h3>⚠️ 即将过期</h3>
-        <div class="expiring-list">
-          <div v-for="item in expiringItems" :key="item.id" class="expiring-item">
-            <span class="item-name">{{ item.ingredient_name }}</span>
-            <span class="item-quantity">{{ item.quantity }} {{ item.unit }}</span>
-            <span class="item-expiry">{{ formatDate(item.expires_at) }}</span>
-          </div>
+    <div class="inventory-list" v-if="inventoryItems.length > 0">
+      <div v-for="item in inventoryItems" :key="item.id" class="inventory-card" :class="{ expired: item.is_expired }">
+        <div class="item-header">
+          <h3>{{ item.ingredient_name }}</h3>
+          <span v-if="item.is_expired" class="expired-badge">已过期</span>
+        </div>
+        <div class="item-details">
+          <span>数量: {{ item.quantity || '-' }} {{ item.unit || '' }}</span>
+          <span v-if="item.expires_at">过期: {{ formatDate(item.expires_at) }}</span>
+        </div>
+        <div v-if="item.note" class="item-note">{{ item.note }}</div>
+        <div class="item-actions">
+          <button @click="editItem(item)" class="btn btn-small">编辑</button>
+          <button @click="deleteItem(item.id)" class="btn btn-small btn-danger">删除</button>
         </div>
       </div>
+    </div>
 
-      <div class="inventory-list" v-if="inventoryItems.length > 0">
-        <div v-for="item in inventoryItems" :key="item.id" class="inventory-card" :class="{ expired: item.is_expired }">
-          <div class="item-header">
-            <h3>{{ item.ingredient_name }}</h3>
-            <span v-if="item.is_expired" class="expired-badge">已过期</span>
-          </div>
-          <div class="item-details">
-            <span>数量: {{ item.quantity || '-' }} {{ item.unit || '' }}</span>
-            <span v-if="item.expires_at">过期: {{ formatDate(item.expires_at) }}</span>
-          </div>
-          <div v-if="item.note" class="item-note">{{ item.note }}</div>
-          <div class="item-actions">
-            <button @click="editItem(item)" class="btn btn-small">编辑</button>
-            <button @click="deleteItem(item.id)" class="btn btn-small btn-danger">删除</button>
-          </div>
-        </div>
-      </div>
+    <div v-else class="empty-state">
+      <p>📦 库存为空</p>
+      <button @click="showAddModal = true" class="btn btn-primary">添加第一个库存</button>
+    </div>
 
-      <div v-else class="empty-state">
-        <p>📦 库存为空</p>
-        <button @click="showAddModal = true" class="btn btn-primary">添加第一个库存</button>
-      </div>
-
-      <div class="pagination" v-if="total > pageSize">
-        <button @click="prevPage" :disabled="page === 1">上一页</button>
-        <span>{{ page }} / {{ totalPages }}</span>
-        <button @click="nextPage" :disabled="page === totalPages">下一页</button>
-      </div>
-    </template>
+    <div class="pagination" v-if="total > pageSize">
+      <button @click="prevPage" :disabled="page === 1">上一页</button>
+      <span>{{ page }} / {{ totalPages }}</span>
+      <button @click="nextPage" :disabled="page === totalPages">下一页</button>
+    </div>
 
     <!-- 添加库存弹窗 -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
@@ -102,35 +85,14 @@
       </div>
     </div>
 
-    <!-- 创建家庭弹窗 -->
-    <div v-if="showCreateHousehold" class="modal-overlay" @click.self="showCreateHousehold = false">
-      <div class="modal">
-        <h2>创建家庭</h2>
-        <form @submit.prevent="createHousehold">
-          <div class="form-group">
-            <label>家庭名称 *</label>
-            <input v-model="newHouseholdName" type="text" required />
-          </div>
-          <div class="modal-actions">
-            <button type="button" @click="showCreateHousehold = false" class="btn btn-secondary">取消</button>
-            <button type="submit" class="btn btn-primary">创建</button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { inventoryApi, ingredientApi } from '../services/api';
-import { useAppStore } from '../stores/app';
-import type { Household, InventoryItem, Ingredient } from '../types';
+import type { InventoryItem, Ingredient } from '../types';
 
-const appStore = useAppStore();
-
-const households = ref<Household[]>([]);
-const currentHousehold = ref<Household | null>(null);
 const inventoryItems = ref<InventoryItem[]>([]);
 const expiringItems = ref<InventoryItem[]>([]);
 const availableIngredients = ref<Ingredient[]>([]);
@@ -139,9 +101,7 @@ const page = ref(1);
 const pageSize = 20;
 
 const showAddModal = ref(false);
-const showCreateHousehold = ref(false);
 const editingItem = ref<InventoryItem | null>(null);
-const newHouseholdName = ref('');
 
 const itemForm = ref({
   ingredient_id: '',
@@ -158,27 +118,9 @@ function formatDate(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString('zh-CN');
 }
 
-async function loadHouseholds() {
-  try {
-    const response = await inventoryApi.listHouseholds();
-    households.value = response.data;
-  } catch (error) {
-    console.error('Failed to load households:', error);
-  }
-}
-
-async function selectHousehold(id: string) {
-  appStore.setHousehold(id);
-  currentHousehold.value = households.value.find(h => h.id === id) || null;
-  loadInventory();
-  loadExpiringItems();
-}
-
 async function loadInventory() {
-  if (!currentHousehold.value) return;
   try {
     const response = await inventoryApi.listItems({
-      household_id: currentHousehold.value.id,
       page: page.value,
       page_size: pageSize
     });
@@ -190,12 +132,8 @@ async function loadInventory() {
 }
 
 async function loadExpiringItems() {
-  if (!currentHousehold.value) return;
   try {
-    expiringItems.value = await inventoryApi.getExpiringSoon({
-      household_id: currentHousehold.value.id,
-      days: 7
-    });
+    expiringItems.value = await inventoryApi.getExpiringSoon({ days: 7 });
   } catch (error) {
     console.error('Failed to load expiring items:', error);
   }
@@ -207,18 +145,6 @@ async function loadIngredients() {
     availableIngredients.value = response.data;
   } catch (error) {
     console.error('Failed to load ingredients:', error);
-  }
-}
-
-async function createHousehold() {
-  try {
-    const household = await inventoryApi.createHousehold({ name: newHouseholdName.value });
-    households.value.push(household);
-    selectHousehold(household.id);
-    showCreateHousehold.value = false;
-    newHouseholdName.value = '';
-  } catch (error) {
-    console.error('Failed to create household:', error);
   }
 }
 
@@ -235,7 +161,6 @@ function editItem(item: InventoryItem) {
 }
 
 async function saveItem() {
-  if (!currentHousehold.value) return;
   try {
     if (editingItem.value) {
       await inventoryApi.updateItem(editingItem.value.id, {
@@ -246,7 +171,6 @@ async function saveItem() {
       });
     } else {
       await inventoryApi.createItem({
-        household_id: currentHousehold.value.id,
         ingredient_id: itemForm.value.ingredient_id,
         quantity: itemForm.value.quantity || undefined,
         unit: itemForm.value.unit || undefined,
@@ -299,17 +223,9 @@ function nextPage() {
 }
 
 onMounted(() => {
-  loadHouseholds();
+  loadInventory();
+  loadExpiringItems();
   loadIngredients();
-  if (appStore.currentHouseholdId) {
-    selectHousehold(appStore.currentHouseholdId);
-  }
-});
-
-watch(() => appStore.currentHouseholdId, (newId) => {
-  if (newId) {
-    selectHousehold(newId);
-  }
 });
 </script>
 
@@ -323,42 +239,6 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-}
-
-.household-selector {
-  text-align: center;
-  padding: 40px;
-  background: #f9f9f9;
-  border-radius: 12px;
-}
-
-.household-list {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
-
-.household-btn {
-  padding: 12px 24px;
-  border: 2px solid #ddd;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s;
-  min-height: 44px;
-}
-
-.household-btn:hover {
-  border-color: #4a90d9;
-  color: #4a90d9;
-}
-
-.household-btn.add {
-  border-style: dashed;
-  color: #888;
 }
 
 .expiring-alert {
@@ -607,19 +487,6 @@ watch(() => appStore.currentHouseholdId, (newId) => {
     width: 100%;
   }
 
-  .household-selector {
-    padding: 24px 16px;
-  }
-
-  .household-list {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .household-btn {
-    width: 100%;
-  }
-
   .expiring-list {
     flex-direction: column;
     gap: 8px;
@@ -692,15 +559,4 @@ watch(() => appStore.currentHouseholdId, (newId) => {
   }
 }
 
-/* 平板端响应式样式 */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .household-list {
-    gap: 8px;
-  }
-
-  .household-btn {
-    padding: 10px 16px;
-    font-size: 13px;
-  }
-}
 </style>

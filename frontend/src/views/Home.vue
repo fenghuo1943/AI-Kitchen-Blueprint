@@ -62,7 +62,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import RecipeCard from '../components/RecipeCard.vue';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
-import { discoverApi, favoriteApi, getHouseholdId } from '../services/api';
+import { discoverApi, favoriteApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { DiscoverRecipe, Recipe } from '../types';
 
@@ -79,11 +79,10 @@ function search() {
 }
 
 async function loadRecommendations() {
-  const householdId = getHouseholdId();
   try {
     const [t, n] = await Promise.all([
-      discoverApi.get({ type: 'today', household_id: householdId, limit: 4 }),
-      discoverApi.get({ type: 'new', household_id: householdId, limit: 4 })
+      discoverApi.get({ type: 'today', limit: 4 }),
+      discoverApi.get({ type: 'new', limit: 4 })
     ]);
     today.value = t.list;
     latest.value = n.list;
@@ -93,17 +92,12 @@ async function loadRecommendations() {
 }
 
 async function toggleFavorite(recipe: Recipe | DiscoverRecipe) {
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先创建/选择家庭（库存管理页）', 'error');
-    return;
-  }
   try {
     if (recipe.is_favorited) {
-      await favoriteApi.remove(recipe.id, householdId);
+      await favoriteApi.remove(recipe.id);
       recipe.is_favorited = false;
     } else {
-      await favoriteApi.add(recipe.id, householdId);
+      await favoriteApi.add(recipe.id);
       recipe.is_favorited = true;
     }
   } catch (e) {

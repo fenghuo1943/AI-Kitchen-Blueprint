@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_resolved_household_id
 from app.db.database import get_db
 from app.repositories.favorite_repository import FavoriteRepository
 from app.repositories.recipe_repository import RecipeRepository
@@ -18,7 +19,7 @@ def get_favorite_service(db: Session = Depends(get_db)) -> FavoriteService:
 
 @router.get("", response_model=FavoriteListResponse)
 def list_favorites(
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
     service: FavoriteService = Depends(get_favorite_service)
@@ -30,7 +31,7 @@ def list_favorites(
 @router.post("", response_model=FavoriteResponse, status_code=201)
 def add_favorite(
     data: FavoriteCreate,
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     db: Session = Depends(get_db),
     service: FavoriteService = Depends(get_favorite_service)
 ):
@@ -53,7 +54,7 @@ def add_favorite(
 @router.delete("/{recipe_id}", status_code=204)
 def remove_favorite(
     recipe_id: str,
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     service: FavoriteService = Depends(get_favorite_service)
 ):
     """取消收藏"""

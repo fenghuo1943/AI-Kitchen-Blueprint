@@ -120,7 +120,7 @@ import { ref, computed, onMounted, onActivated, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import RecipeCard from '../components/RecipeCard.vue';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
-import { recipeApi, categoryApi, ingredientApi, favoriteApi, getHouseholdId } from '../services/api';
+import { recipeApi, categoryApi, ingredientApi, favoriteApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
 import type { Recipe, Category, Ingredient } from '../types';
@@ -235,7 +235,6 @@ async function loadRecipes() {
       category_id: categoryId.value || undefined,
       ingredients: selectedIngredients.value.map(i => i.id).join(',') || undefined,
       match: selectedIngredients.value.length ? match.value : undefined,
-      household_id: getHouseholdId(),
       page: page.value,
       page_size: pageSize
     });
@@ -250,18 +249,13 @@ async function loadRecipes() {
 }
 
 async function toggleFavorite(recipe: Recipe | import('../types').DiscoverRecipe) {
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先创建/选择家庭（库存管理页）', 'error');
-    return;
-  }
   try {
     if (recipe.is_favorited) {
-      await favoriteApi.remove(recipe.id, householdId);
+      await favoriteApi.remove(recipe.id);
       recipe.is_favorited = false;
       toast('已取消收藏');
     } else {
-      await favoriteApi.add(recipe.id, householdId);
+      await favoriteApi.add(recipe.id);
       recipe.is_favorited = true;
       toast('已收藏');
     }

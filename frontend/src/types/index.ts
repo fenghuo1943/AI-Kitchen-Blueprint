@@ -155,14 +155,6 @@ export interface InventoryItem {
   updated_at: string;
 }
 
-export interface Household {
-  id: string;
-  name: string;
-  description?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 // 推荐相关
 export interface RecommendationRequest {
   ingredients: string[];

@@ -68,11 +68,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import { useAppStore } from './stores/app';
+import { ref, watch } from 'vue';
 import { useResponsive } from './composables/useResponsive';
 
-const appStore = useAppStore();
 const { isMobile } = useResponsive();
 
 const isMobileMenuOpen = ref(false);
@@ -90,10 +88,6 @@ watch(isMobile, (newVal) => {
   if (!newVal) {
     isMobileMenuOpen.value = false;
   }
-});
-
-onMounted(() => {
-  appStore.init();
 });
 </script>
 

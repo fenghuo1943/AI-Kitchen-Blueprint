@@ -6,7 +6,7 @@ from datetime import datetime
 
 class InventoryItemBase(BaseModel):
     """库存物品基础模式"""
-    household_id: str = Field(..., description="家庭ID")
+    household_id: Optional[str] = Field(None, description="家庭ID（可选，缺省时服务端使用默认家庭）")
     ingredient_id: str = Field(..., description="食材ID")
     quantity: Optional[str] = Field(None, description="数量")
     unit: Optional[str] = Field(None, description="单位")

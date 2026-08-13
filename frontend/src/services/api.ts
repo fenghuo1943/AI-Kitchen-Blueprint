@@ -4,7 +4,6 @@ import type {
   Ingredient,
   Recipe,
   InventoryItem,
-  Household,
   RecommendationRequest,
   RecommendationResponse,
   IngestionJob,
@@ -46,11 +45,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-/** 获取当前家庭 ID（从 store 的 localStorage 读取） */
-export function getHouseholdId(): string | undefined {
-  return localStorage.getItem('householdId') || undefined;
-}
 
 // 食材 API
 export const ingredientApi = {
@@ -117,13 +111,13 @@ export const recipeApi = {
   list: (params?: {
     query?: string; q?: string; status?: string; difficulty?: string; tags?: string;
     ingredients?: string; match?: 'exact' | 'any'; category_id?: string;
-    household_id?: string; sort?: string; order?: string; deleted?: boolean;
+    sort?: string; order?: string; deleted?: boolean;
     page?: number; page_size?: number;
   }) =>
     api.get<any, PaginatedResponse<Recipe>>('/recipes', { params }),
 
-  get: (id: string, householdId?: string) =>
-    api.get<any, Recipe>(`/recipes/${id}`, { params: { household_id: householdId } }),
+  get: (id: string) =>
+    api.get<any, Recipe>(`/recipes/${id}`),
 
   create: (data: RecipeInput) =>
     api.post<any, Recipe>('/recipes', data),
@@ -143,23 +137,13 @@ export const recipeApi = {
 
 // 库存 API
 export const inventoryApi = {
-  listHouseholds: () =>
-    api.get<any, PaginatedResponse<Household>>('/inventory/households'),
-
-  createHousehold: (data: { name: string; description?: string }) =>
-    api.post<any, Household>('/inventory/households', data),
-
-  getHousehold: (id: string) =>
-    api.get<any, Household>(`/inventory/households/${id}`),
-
-  listItems: (params: { household_id: string; page?: number; page_size?: number }) =>
+  listItems: (params: { page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<InventoryItem>>('/inventory/items', { params }),
 
   getItem: (id: string) =>
     api.get<any, InventoryItem>(`/inventory/items/${id}`),
 
   createItem: (data: {
-    household_id: string;
     ingredient_id: string;
     quantity?: string;
     unit?: string;
@@ -174,7 +158,7 @@ export const inventoryApi = {
   deleteItem: (id: string) =>
     api.delete(`/inventory/items/${id}`),
 
-  getExpiringSoon: (params: { household_id: string; days?: number }) =>
+  getExpiringSoon: (params: { days?: number }) =>
     api.get<any, InventoryItem[]>('/inventory/expiring-soon', { params })
 };
 
@@ -189,52 +173,52 @@ export const recommendationApi = {
 
 // 收藏 API
 export const favoriteApi = {
-  list: (params: { household_id: string; page?: number; page_size?: number }) =>
+  list: (params: { page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<FavoriteItem>>('/favorites', { params }),
 
-  add: (recipeId: string, householdId: string) =>
-    api.post<any, FavoriteItem>('/favorites', { recipe_id: recipeId }, { params: { household_id: householdId } }),
+  add: (recipeId: string) =>
+    api.post<any, FavoriteItem>('/favorites', { recipe_id: recipeId }),
 
-  remove: (recipeId: string, householdId: string) =>
-    api.delete(`/favorites/${recipeId}`, { params: { household_id: householdId } })
+  remove: (recipeId: string) =>
+    api.delete(`/favorites/${recipeId}`)
 };
 
 // 浏览历史 API
 export const historyApi = {
-  list: (params: { household_id: string; page?: number; page_size?: number }) =>
+  list: (params: { page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<HistoryItem>>('/history', { params }),
 
-  record: (recipeId: string, householdId: string) =>
-    api.post<any, HistoryItem>('/history', { recipe_id: recipeId }, { params: { household_id: householdId } }),
+  record: (recipeId: string) =>
+    api.post<any, HistoryItem>('/history', { recipe_id: recipeId }),
 
-  removeOne: (recipeId: string, householdId: string) =>
-    api.delete(`/history/${recipeId}`, { params: { household_id: householdId } }),
+  removeOne: (recipeId: string) =>
+    api.delete(`/history/${recipeId}`),
 
-  clear: (householdId: string) =>
-    api.delete('/history', { params: { household_id: householdId } })
+  clear: () =>
+    api.delete('/history')
 };
 
 // 每日菜单 API
 export const menuApi = {
-  getByDate: (householdId: string, date: string) =>
-    api.get<any, MenuByDate>('/menu', { params: { household_id: householdId, date } }),
+  getByDate: (date: string) =>
+    api.get<any, MenuByDate>('/menu', { params: { date } }),
 
-  getMonthDates: (householdId: string, month: string) =>
-    api.get<any, { dates: string[] }>('/menu', { params: { household_id: householdId, month } }),
+  getMonthDates: (month: string) =>
+    api.get<any, { dates: string[] }>('/menu', { params: { month } }),
 
-  getWaterfall: (householdId: string, params: { page?: number; page_size?: number }) =>
-    api.get<any, WaterfallResponse>('/menu', { params: { household_id: householdId, mode: 'waterfall', ...params } }),
+  getWaterfall: (params: { page?: number; page_size?: number }) =>
+    api.get<any, WaterfallResponse>('/menu', { params: { mode: 'waterfall', ...params } }),
 
-  add: (householdId: string, recipeId: string, date: string) =>
-    api.post('/menu', { recipe_id: recipeId, date }, { params: { household_id: householdId } }),
+  add: (recipeId: string, date: string) =>
+    api.post('/menu', { recipe_id: recipeId, date }),
 
-  remove: (householdId: string, recipeId: string, date: string) =>
-    api.delete(`/menu/${recipeId}`, { params: { household_id: householdId, date } })
+  remove: (recipeId: string, date: string) =>
+    api.delete(`/menu/${recipeId}`, { params: { date } })
 };
 
 // 发现 API
 export const discoverApi = {
-  get: (params: { type: DiscoverType; household_id?: string; limit?: number }) =>
+  get: (params: { type: DiscoverType; limit?: number }) =>
     api.get<any, { list: DiscoverRecipe[] }>('/discover', { params })
 };
 
@@ -247,7 +231,6 @@ export const ragApi = {
     tags?: string[];
     ingredient_ids?: string[];
     category_id?: string;
-    household_id?: string;
   }) =>
     api.post<any, RagSearchResponse>('/rag/search', data),
 

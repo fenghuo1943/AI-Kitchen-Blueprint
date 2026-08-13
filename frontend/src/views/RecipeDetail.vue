@@ -122,7 +122,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
-import { recipeApi, recommendationApi, favoriteApi, getHouseholdId } from '../services/api';
+import { recipeApi, recommendationApi, favoriteApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
 import type { Recipe } from '../types';
@@ -139,7 +139,7 @@ const menuModal = ref();
 async function loadRecipe() {
   try {
     const id = route.params.id as string;
-    recipe.value = await recipeApi.get(id, getHouseholdId());
+    recipe.value = await recipeApi.get(id);
   } catch (error) {
     console.error('Failed to load recipe:', error);
   }
@@ -159,18 +159,13 @@ async function publishRecipe() {
 
 async function toggleFavorite() {
   if (!recipe.value) return;
-  const householdId = getHouseholdId();
-  if (!householdId) {
-    toast('请先创建/选择家庭（库存管理页）', 'error');
-    return;
-  }
   try {
     if (recipe.value.is_favorited) {
-      await favoriteApi.remove(recipe.value.id, householdId);
+      await favoriteApi.remove(recipe.value.id);
       recipe.value.is_favorited = false;
       toast('已取消收藏');
     } else {
-      await favoriteApi.add(recipe.value.id, householdId);
+      await favoriteApi.add(recipe.value.id);
       recipe.value.is_favorited = true;
       toast('已收藏');
     }

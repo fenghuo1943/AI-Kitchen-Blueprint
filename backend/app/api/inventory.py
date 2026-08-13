@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_resolved_household_id
 from app.db.database import get_db
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -58,7 +59,7 @@ def get_household(
 # 库存物品管理接口
 @router.get("/items", response_model=InventoryListResponse)
 def list_inventory_items(
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     ingredient_id: Optional[str] = Query(None, description="食材ID筛选"),
     include_expired: bool = Query(False, description="是否包含过期物品"),
     page: int = Query(1, ge=1, description="页码"),
@@ -124,7 +125,7 @@ def delete_inventory_item(
 
 @router.get("/expiring-soon", response_model=list[InventoryItemResponse])
 def get_expiring_soon(
-    household_id: str = Query(..., description="家庭ID"),
+    household_id: str = Depends(get_resolved_household_id),
     days: int = Query(7, ge=1, le=30, description="天数范围"),
     service: InventoryService = Depends(get_inventory_service)
 ):

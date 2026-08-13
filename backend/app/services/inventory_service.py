@@ -6,6 +6,7 @@ from datetime import datetime
 from app.db.models import InventoryItem, Household
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.ingredient_repository import IngredientRepository
+from app.services.household_resolver import resolve_default_household_id
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     InventoryListResponse, InventorySearchRequest, HouseholdCreate, HouseholdResponse,
@@ -50,8 +51,10 @@ class InventoryService:
 
     def create_item(self, data: InventoryItemCreate) -> InventoryItemResponse:
         """创建库存物品"""
-        # 验证家庭是否存在
-        household = self.inventory_repository.get_household(data.household_id)
+        # 家庭未显式指定时落到默认家庭
+        household_id = data.household_id or resolve_default_household_id(self.inventory_repository.db)
+        # 验证家庭是否存在（显式传入的 id 仍校验；默认路径必然存在）
+        household = self.inventory_repository.get_household(household_id)
         if not household:
             raise ValueError("家庭不存在")
 
@@ -62,7 +65,7 @@ class InventoryService:
 
         # 检查是否已存在相同食材的库存
         existing_items, _ = self.inventory_repository.search(
-            household_id=data.household_id,
+            household_id=household_id,
             ingredient_id=data.ingredient_id,
             include_expired=True
         )
@@ -72,7 +75,7 @@ class InventoryService:
         # 创建库存物品
         item = InventoryItem(
             id=str(uuid.uuid4()),
-            household_id=data.household_id,
+            household_id=household_id,
             ingredient_id=data.ingredient_id,
             quantity=data.quantity,
             unit=data.unit,

@@ -3,6 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_resolved_household_id
 from app.db.database import get_db
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -33,7 +34,7 @@ def list_recipes(
     ingredients: Optional[str] = Query(None, description="食材ID（逗号分隔）"),
     match: str = Query("any", pattern="^(exact|any)$", description="食材匹配模式 exact=全含 any=任一"),
     category_id: Optional[str] = Query(None, description="菜谱分类ID"),
-    household_id: Optional[str] = Query(None, description="家庭ID（用于收藏/菜单状态）"),
+    household_id: str = Depends(get_resolved_household_id),
     sort: str = Query("score", description="排序: score综合 date最新 title名称 cook做过次数 random随机"),
     order: str = Query("desc", description="排序方向 asc/desc"),
     deleted: bool = Query(False, description="是否查询回收站（已删除）"),
@@ -66,7 +67,7 @@ def list_recipes(
 @router.get("/{recipe_id}", response_model=RecipeResponse)
 def get_recipe(
     recipe_id: str,
-    household_id: Optional[str] = Query(None, description="家庭ID（记录浏览历史并返回收藏/菜单状态）"),
+    household_id: str = Depends(get_resolved_household_id),
     service: RecipeService = Depends(get_recipe_service)
 ):
     """获取菜谱详情（打开即记录浏览历史）"""
