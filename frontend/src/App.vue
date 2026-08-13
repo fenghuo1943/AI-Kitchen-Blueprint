@@ -47,6 +47,10 @@
 
     <!-- 移动端底部 tabbar -->
     <nav v-if="isMobile" class="tabbar">
+      <router-link to="/" class="tabbar-item" @click="closeMobileMenu">
+        <span class="tabbar-icon">🏠</span>
+        <span class="tabbar-label">主页</span>
+      </router-link>
       <router-link to="/recipes" class="tabbar-item" @click="closeMobileMenu">
         <span class="tabbar-icon">🍳</span>
         <span class="tabbar-label">菜谱库</span>
