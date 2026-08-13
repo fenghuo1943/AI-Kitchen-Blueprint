@@ -734,6 +734,145 @@ def test_manual_collection_validation_fails(db_session, no_enqueue, tavily_key):
     assert "校验未通过" in (job.reason or "")
 
 
+# ------------------------------------------------------------------ #
+# 结构化菜谱 JSON 直入（AI 生成 JSON → 手动粘贴）
+# ------------------------------------------------------------------ #
+def test_try_parse_structured_recipe_unit():
+    """判定：dict+非空 title 通过；空白/非 dict/非 JSON/超长拒绝。"""
+    svc = make_service()
+    assert svc._try_parse_structured_recipe('{"title":"西红柿炒鸡蛋"}')["title"] == "西红柿炒鸡蛋"
+    assert svc._try_parse_structured_recipe('﻿  {"title":"菜"}\n')["title"] == "菜"   # BOM + 首尾空白
+    assert svc._try_parse_structured_recipe('```json\n{"title":"菜"}\n```')["title"] == "菜"  # 围栏
+    assert svc._try_parse_structured_recipe('```JSON\n{"title":"菜"}\n```')["title"] == "菜"  # 大写标签
+    assert svc._try_parse_structured_recipe('{"title":"x","ingredients":[],"steps":[]}')["title"] == "x"
+    assert svc._try_parse_structured_recipe('{"title":""}') is None          # 空标题
+    assert svc._try_parse_structured_recipe('{"title":"  "}') is None        # 空白标题
+    assert svc._try_parse_structured_recipe('[1,2]') is None                 # 数组
+    assert svc._try_parse_structured_recipe('西红柿炒鸡蛋做法……') is None      # 非 JSON
+    assert svc._try_parse_structured_recipe('{"title":"' + "x" * 200_000 + '"}') is None  # 超长
+
+
+def test_create_ai_job_manual_structured_json_no_url_ok(db_session, no_enqueue, tavily_key):
+    """结构化菜谱 JSON + 空 URL → 建任务成功（URL 可选）。"""
+    resp = make_service().create_ai_job(db_session, SimpleNamespace(
+        request_text="", mode="manual", target_recipe_id=None, max_results=5,
+        llm_provider=None, llm_model=None, search_sites=None,
+        manual_url="", manual_content=json.dumps(make_recipe(), ensure_ascii=False),
+    ))
+    job = db_session.query(IngestionJob).filter_by(id=resp.id).first()
+    assert job.manual_url == ""
+
+
+def test_manual_structured_json_direct_no_llm(db_session, no_enqueue, tavily_key):
+    """结构化 JSON 直入：不调 LLM、产出候选、无来源时来源为空。"""
+    llm = FakeLLM(make_recipe())
+    service = make_service(llm=llm)
+    job = make_job(db_session, mode="manual", request_text="")
+    recipe = make_recipe()
+    recipe.pop("source_url")  # 纯 AI 创作无来源
+    job.manual_content = json.dumps(recipe, ensure_ascii=False)
+    job.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    assert llm.calls == 0  # 跳过 LLM 抽取
+    db_session.refresh(job)
+    assert job.stage == "review"
+    assert job.candidates_count == 1
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    assert json.loads(candidate.source_urls_json) == []
+    assert candidate.source_id is None
+
+
+def test_manual_structured_json_validation_failed_no_llm(db_session, no_enqueue, tavily_key):
+    """带 title 但无食材的结构化 JSON → EXTRACTION_FAILED，不调 LLM，原因明确。"""
+    llm = FakeLLM(make_recipe())
+    service = make_service(llm=llm)
+    job = make_job(db_session, mode="manual", request_text="")
+    job.manual_content = '{"title":"x","ingredients":[],"steps":[]}'
+    job.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    assert llm.calls == 0
+    db_session.refresh(job)
+    assert job.status == "failed"
+    assert job.error_code == "EXTRACTION_FAILED"
+    assert "校验未通过" in (job.reason or "")
+    assert "无食材" in (job.reason or "")
+
+
+def test_manual_structured_json_with_fence(db_session, no_enqueue, tavily_key):
+    """Markdown 围栏包裹的结构化 JSON 仍能直入。"""
+    llm = FakeLLM(make_recipe())
+    service = make_service(llm=llm)
+    job = make_job(db_session, mode="manual", request_text="")
+    job.manual_content = "```json\n" + json.dumps(make_recipe(), ensure_ascii=False) + "\n```"
+    job.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    assert llm.calls == 0
+    db_session.refresh(job)
+    assert job.stage == "review"
+    assert job.candidates_count == 1
+
+
+def test_manual_structured_json_source_url_fallback(db_session, no_enqueue, tavily_key):
+    """JSON 自带 http(s) source_url → 作为候选来源；javascript: 等协议被过滤。"""
+    service = make_service(llm=FakeLLM(make_recipe()))
+
+    job = make_job(db_session, mode="manual", request_text="")
+    recipe = make_recipe()
+    recipe["source_url"] = "https://ref.example.com/recipe"
+    job.manual_content = json.dumps(recipe, ensure_ascii=False)
+    job.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+    db_session.refresh(job)
+    assert job.stage == "review"
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    assert json.loads(candidate.source_urls_json) == ["https://ref.example.com/recipe"]
+
+    # javascript: 协议被过滤（用不同标题避免与上一个候选去重命中）
+    job2 = make_job(db_session, mode="manual", request_text="")
+    recipe2 = make_recipe(title="红烧肉")
+    recipe2["source_url"] = "javascript:alert(1)"
+    job2.manual_content = json.dumps(recipe2, ensure_ascii=False)
+    job2.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job2.id)
+    db_session.refresh(job2)
+    assert job2.stage == "review"
+    candidate2 = db_session.query(IngestionCandidate).filter_by(job_id=job2.id).first()
+    assert json.loads(candidate2.source_urls_json) == []
+
+
+def test_manual_non_json_without_url_defensive(db_session, no_enqueue, tavily_key):
+    """非结构化正文 + 空 URL 直接 _run_collection → EXTRACTION_FAILED、无候选（防御分支）。"""
+    service = make_service(llm=FakeLLM(make_recipe()))
+    job = make_job(db_session, mode="manual", request_text="")
+    job.manual_content = "西红柿炒鸡蛋做法……"
+    job.manual_url = ""
+    db_session.commit()
+    service._run_collection(db_session, job.id)
+
+    db_session.refresh(job)
+    assert job.status == "failed"
+    assert job.error_code == "EXTRACTION_FAILED"
+    assert db_session.query(IngestionCandidate).filter_by(job_id=job.id).count() == 0
+
+
+def test_validate_recipe_reason_whitespace_title_fails():
+    """空白标题不通过校验（prompts 加固）。"""
+    recipe = {
+        "title": "   ",
+        "ingredients": [{"name": "西红柿"}],
+        "steps": [{"step_no": 1, "instruction": "炒"}],
+    }
+    assert validate_recipe_reason(recipe) == "标题为空"
+
+
 def test_collect_handles_page_failure(db_session, no_enqueue, tavily_key):
     bad_url = "https://example.com/bad"
     good_url = "https://example.com/tomato"

@@ -53,6 +53,11 @@ from app.tasks import executor
 
 logger = logging.getLogger(__name__)
 
+# 结构化菜谱 JSON 直入的上限：超过则放弃直入、回退 LLM 截断路径
+# （LLM 路径经 build_extraction_messages 截断到 AI_COLLECT_PAGE_CHARS），
+# 防止恶意/病态超大粘贴拖慢 json.loads。
+_MAX_STRUCTURED_JSON_CHARS = 200_000
+
 
 class AiCollectionService:
     """AI 采集服务类。构造注入 tavily/llm，测试可换 fake。"""
@@ -84,10 +89,13 @@ class AiCollectionService:
             raise ValueError("TAVILY_NOT_CONFIGURED")
 
         if is_manual:
-            if not (data.manual_url or "").strip():
-                raise ValueError("手动模式需要提供来源 URL")
-            if not (data.manual_content or "").strip():
+            content = data.manual_content or ""
+            if not content.strip():
                 raise ValueError("手动模式需要提供粘贴的正文内容")
+            # URL 可选：粘贴的是结构化菜谱 JSON（AI 生成）时可留空，否则需来源 URL。
+            # 判定复用 _try_parse_structured_recipe，与后台抽取路径保持一致，避免前后漂移。
+            if not (data.manual_url or "").strip() and self._try_parse_structured_recipe(content) is None:
+                raise ValueError("手动模式需要提供来源 URL，或粘贴结构化菜谱 JSON")
         elif not (data.request_text or "").strip():
             raise ValueError("请输入菜名/食材")
 
@@ -308,23 +316,51 @@ class AiCollectionService:
             db.commit()
 
     def _run_manual_collection(self, db: Session, job: IngestionJob) -> None:
-        """手动模式：跳过 Tavily，直接用用户粘贴的 URL+正文走 LLM 抽取。
+        """手动模式：跳过 Tavily，直接用用户粘贴的内容结构化抽取。
 
-        用于小红书等登录墙/反爬站点——Tavily 抓不到正文，用户在自己浏览器
-        （已登录）里复制正文粘贴进来，其余走同一套抽取→候选→审核流水线。
+        两种内容形态：
+        - 结构化菜谱 JSON（AI 生成）：识别后直接校验落库，跳过 LLM 抽取；
+        - 网页正文（登录墙/反爬站点如小红书）：用户复制正文粘贴进来，
+          走 LLM 抽取，其余走同一套抽取→候选→审核流水线。
         """
         job.status = "running"
         job.stage = "fetched"
         job.started_at = job.started_at or datetime.utcnow()
         db.commit()
 
-        llm = self._llm if self._llm_injected else self._build_job_llm(job)
         url = (job.manual_url or "").strip()
         content = (job.manual_content or "").strip()
-        if not url or not content:
+        if not content:
             self._finish(db, job, error_code="NO_SEARCH_RESULTS")
             return
 
+        # 结构化菜谱 JSON 直入：不调 LLM（LLM 宕机时仍可入库，校验走 _process_extracted_recipe 内部）
+        parsed = self._try_parse_structured_recipe(content)
+        if parsed is not None:
+            recipe = parsed
+            urls = [url] if url else self._recipe_source_urls(recipe)
+            recipe["source_url"] = urls[0] if urls else ""
+            logger.info(
+                "任务 %s: 检测到结构化菜谱 JSON，跳过 LLM 抽取 title=%r urls=%s",
+                job.id, recipe.get("title"), urls,
+            )
+            if self._process_extracted_recipe(db, job, recipe, urls):
+                job.status = "running"
+                job.stage = "review"
+                logger.info("任务 %s: 结构化菜谱 JSON 产出候选，进入人工审核", job.id)
+                db.commit()
+            else:
+                logger.warning("任务 %s: 结构化菜谱 JSON 未通过校验", job.id)
+                self._finish(db, job, error_code="EXTRACTION_FAILED")
+            return
+
+        # 非结构化正文：需来源 URL，走 LLM 抽取（LLM 惰性构建，JSON 路径不触碰）
+        if not url:
+            logger.warning("任务 %s: 正文不是结构化 JSON 且缺少来源 URL", job.id)
+            self._finish(db, job, error_code="EXTRACTION_FAILED")
+            return
+
+        llm = self._llm if self._llm_injected else self._build_job_llm(job)
         logger.info(
             "任务 %s: 手动来源 %s 正文 %d 字 llm=%s/%s",
             job.id, url, len(content),
@@ -459,6 +495,52 @@ class AiCollectionService:
         except ValueError:
             return False
         return any(host == d or host.endswith("." + d) for d in domains)
+
+    # ------------------------------------------------------------------ #
+    # 结构化菜谱 JSON 直入
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _try_parse_structured_recipe(content) -> Optional[dict]:
+        """把粘贴内容当结构化菜谱 JSON 解析；不是 JSON dict 或 title 为空返回 None。
+
+        判定规则（前端 lookStructuredRecipe 同构镜像，注意两者对非标准 JSON 的差异：
+        后端 json.loads 容忍 NaN/Infinity，前端 JSON.parse 拒绝 → 前端更严只会让用户
+        多填来源 URL，漂移只发生在安全方向）：
+        1. 去首尾空白与 BOM（\\ufeff）；
+        2. 兼容 Markdown 代码围栏 ```json ... ```（大小写不敏感）；
+        3. 严格 JSON 解析；
+        4. 顶层必须是 dict 且 title（strip 后）非空。
+        仅凭 title 判定"意图直入"；食材/步骤缺失交给 validate_recipe_reason 显式报错，
+        避免把 {"title":"x"} 这类输入静默丢回 LLM。
+        """
+        text = (content or "").strip()
+        if not text:
+            return None
+        if len(text) > _MAX_STRUCTURED_JSON_CHARS:
+            return None
+        text = text.lstrip("\ufeff")
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        try:
+            data = json.loads(text)
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if not str(data.get("title") or "").strip():
+            return None
+        return data
+
+    @staticmethod
+    def _recipe_source_urls(recipe: dict) -> List[str]:
+        """取 JSON 自带 source_url 作为候选来源；仅接受 http(s)（防 javascript: 等注入）。"""
+        url = (recipe.get("source_url") or "").strip()
+        if url.startswith(("http://", "https://")):
+            return [url]
+        return []
 
     # ------------------------------------------------------------------ #
     # 落库

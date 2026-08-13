@@ -16,8 +16,8 @@ class AICollectionCreate(BaseModel):
     llm_provider: Optional[str] = Field(None, description="采集用 LLM 供应商：ollama/anthropic/deepseek/openrouter/openai_compat（缺省取配置）")
     llm_model: Optional[str] = Field(None, description="采集用模型名（缺省取配置）")
     search_sites: Optional[List[str]] = Field(None, description="限定搜索的站点域名列表，如 ['xiachufang.com']；缺省取全局配置 AI_COLLECT_SEARCH_SITES")
-    manual_url: Optional[str] = Field(None, description="手动模式：来源页面 URL（登录墙/反爬站点如小红书）")
-    manual_content: Optional[str] = Field(None, description="手动模式：用户粘贴的页面正文")
+    manual_url: Optional[str] = Field(None, description="手动模式：来源页面 URL（登录墙/反爬站点如小红书）；粘贴结构化菜谱 JSON 时可为空")
+    manual_content: Optional[str] = Field(None, description="手动模式：用户粘贴的页面正文，或 AI 生成的结构化菜谱 JSON")
 
 
 class LLMModelOption(BaseModel):

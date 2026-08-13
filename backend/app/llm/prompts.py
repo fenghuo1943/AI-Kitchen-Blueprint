@@ -212,7 +212,7 @@ def validate_recipe_reason(recipe: dict) -> Optional[str]:
     """规则校验与归一化；返回 None 表示通过，否则返回具体失败原因（供日志/任务原因展示）。
     归一化副作用与 validate_recipe 一致：步骤字符串/对象统一、食材 amount 拆分，
     并把食材中的调料（盐/酱油/料酒/葱姜蒜等）自动拆到 recipe['seasonings']。"""
-    if not recipe.get("title"):
+    if not (recipe.get("title") or "").strip():
         return "标题为空"
 
     # 食材/调料：兼容 {name, amount} / {name, quantity, unit} / 纯字符串；

@@ -40,9 +40,10 @@
           v-model="form.manual_url"
           class="manual-url"
           type="text"
-          placeholder="来源页面 URL，如 https://www.xiaohongshu.com/explore/xxx 或 xhslink.com 短链"
+          placeholder="来源 URL（粘贴结构化菜谱 JSON 时可留空；粘贴网页正文时必填），如 https://www.xiaohongshu.com/explore/xxx 或 xhslink.com 短链"
         />
         <div class="manual-tools">
+          <button class="btn btn-secondary btn-small" @click="fillSampleRecipe">填入示例</button>
           <button class="btn btn-secondary btn-small" :disabled="browserBusy || !browserStatus?.available" @click="browserLogin">
             {{ browserBusy ? '等待登录…' : '浏览器登录' }}
           </button>
@@ -54,12 +55,12 @@
           v-model="form.manual_content"
           class="manual-content"
           rows="8"
-          placeholder="从网页复制正文粘贴到这里（食材、做法等）；也可粘贴小红书「分享→复制链接」的整段文本，链接会自动填入上方 URL…"
+          placeholder="粘贴 AI 生成的结构化菜谱 JSON（可直接入库、无需 URL）；或粘贴网页正文（食材、做法等，需填来源 URL）；也可粘贴小红书「分享→复制链接」的整段文本，链接会自动填入上方 URL…"
           @input="detectUrlFromContent"
         ></textarea>
+        <p v-if="isStructured" class="json-hint">已识别结构化菜谱 JSON，将直接入库为待审候选（无需 LLM 抽取，来源 URL 可留空）</p>
         <p class="hint">
-          适用于登录墙/反爬站点（如小红书）：浏览器里打开页面 → 点「分享」→「复制链接」，复制出的文本会带正文，直接粘贴到上方即可（链接自动识别）；
-          或填 URL 后点「浏览器自动抓取」，用你自己的登录态自动取正文。将直接用所选 LLM 抽取为菜谱候选，无需 Tavily。
+          两种用法：① 粘贴 AI 生成的菜谱 JSON（按 RecipeExtraction 结构）直接入库；② 登录墙/反爬站点（如小红书）——浏览器里打开页面 →「分享」→「复制链接」，复制出的文本带正文直接粘贴（链接自动识别），或填 URL 后点「浏览器自动抓取」。②会用所选 LLM 抽取为菜谱候选，无需 Tavily。
         </p>
         <p v-if="browserStatus && !browserStatus.available" class="browser-hint">
           浏览器抓取不可用：{{ browserStatus.reason || '未开启' }}
@@ -349,12 +350,82 @@ async function autoFetch() {
   }
 }
 
-/** 从粘贴文本识别小红书链接（「分享→复制链接」的文本带正文+短链），URL 为空时自动填入 */
+/** 尝试把粘贴内容解析为结构化菜谱 JSON；不是 JSON 对象或 title 为空返回 null。
+ *  与后端 _try_parse_structured_recipe 同构：trim → 去 BOM → 去 ```json 围栏 → 严格 JSON → title.strip()。
+ *  注意 JS JSON.parse 比 Python json.loads 更严（拒绝 NaN/Infinity）→ 前端更严只会让用户多填来源 URL，
+ *  判定漂移只发生在安全方向。 */
+function tryParseStructuredRecipe(content: string): Record<string, any> | null {
+  let text = (content || '').trim();
+  if (!text) return null;
+  if (text.length > 200000) return null;  // 镜像后端 _MAX_STRUCTURED_JSON_CHARS
+  text = text.replace(/^\uFEFF/, '');
+  if (text.startsWith('```')) {
+    text = text.replace(/^`+/, '').replace(/`+$/, '').trim();
+    if (/^json/i.test(text)) text = text.slice(4).trim();
+  }
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object' && !Array.isArray(data)
+        && typeof data.title === 'string' && data.title.trim()) {
+      return data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeStructuredRecipe(content: string): boolean {
+  return tryParseStructuredRecipe(content) !== null;
+}
+
+/** 手动模式是否已识别结构化菜谱 JSON（绿色提示 + URL 可选依据） */
+const isStructured = computed(() =>
+  form.value.mode === 'manual' && looksLikeStructuredRecipe(form.value.manual_content)
+);
+
+/** 示例菜谱（RecipeExtraction 结构），供「填入示例」按钮填充测试 */
+const SAMPLE_RECIPE_JSON = JSON.stringify({
+  title: '西红柿炒鸡蛋',
+  summary: '经典家常菜',
+  servings: 2,
+  prep_minutes: 5,
+  cook_minutes: 10,
+  difficulty: '简单',
+  ingredients: [
+    { name: '西红柿', amount: '2个', preparation: '切块' },
+    { name: '鸡蛋', amount: '3个', preparation: '打散' }
+  ],
+  seasonings: [
+    { name: '盐', amount: '适量' },
+    { name: '葱花', amount: '少许' }
+  ],
+  steps: [
+    { step_no: 1, instruction: '西红柿切块，鸡蛋加少许盐打散' },
+    { step_no: 2, instruction: '热油炒熟鸡蛋盛出，再炒西红柿出汁后回锅', duration_minutes: 5 },
+    { step_no: 3, instruction: '加盐调味，撒葱花出锅' }
+  ],
+  tags: ['家常菜', '快手菜'],
+  source_url: ''
+}, null, 2);
+
+function fillSampleRecipe() {
+  form.value.manual_url = '';
+  form.value.manual_content = SAMPLE_RECIPE_JSON;
+  detectUrlFromContent();
+}
+
+/** 从粘贴文本识别来源 URL：小红书「分享→复制链接」短链，或结构化 JSON 自带的 http(s) source_url；URL 非空时不覆盖 */
 function detectUrlFromContent() {
   if (form.value.manual_url.trim()) return;
   const m = form.value.manual_content.match(/https?:\/\/(?:xhslink\.com\/\S+|www\.xiaohongshu\.com\/\S+)/);
   if (m) {
     form.value.manual_url = m[0].replace(/[，。；,.;]+$/, '');
+    return;
+  }
+  const parsed = tryParseStructuredRecipe(form.value.manual_content);
+  if (parsed?.source_url && /^https?:\/\//.test(parsed.source_url)) {
+    form.value.manual_url = parsed.source_url;
   }
 }
 
@@ -414,12 +485,12 @@ watch(() => form.value.mode, (mode) => {
 // ---- 提交与轮询 ----
 async function submit() {
   if (form.value.mode === 'manual') {
-    if (!form.value.manual_url.trim()) {
-      toast('请填写来源 URL', 'error');
+    if (!form.value.manual_content.trim()) {
+      toast('请粘贴网页正文或结构化菜谱 JSON', 'error');
       return;
     }
-    if (!form.value.manual_content.trim()) {
-      toast('请粘贴网页正文', 'error');
+    if (!form.value.manual_url.trim() && !looksLikeStructuredRecipe(form.value.manual_content)) {
+      toast('粘贴网页正文时请填写来源 URL（结构化 JSON 菜谱可留空）', 'error');
       return;
     }
   } else {
@@ -652,6 +723,10 @@ onUnmounted(stopPolling);
 .browser-hint {
   margin: 8px 0 0; font-size: 12px; color: #c05621; background: #fff7ed;
   border-radius: 6px; padding: 6px 10px;
+}
+.json-hint {
+  margin: 8px 0 0; font-size: 12px; color: #166534; background: #f0fdf4;
+  border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 10px;
 }
 .manual-content {
   width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px;
