@@ -64,25 +64,41 @@
       <div v-if="showDatePicker" class="date-picker-mask" @click.self="showDatePicker = false">
         <div class="date-picker">
           <h3 class="date-picker-title">选择年月</h3>
-          <div class="picker-years">
-            <button class="btn btn-secondary year-shift" @click="shiftYears(-1)">‹</button>
-            <div class="year-list">
-              <button
-                v-for="y in yearList"
-                :key="y"
-                :class="['year-btn', y === pickYear ? 'active' : '']"
-                @click="pickYear = y"
-              >{{ y }}</button>
+          <div class="picker-wheels">
+            <div
+              class="wheel"
+              @pointerdown.prevent="wheelDown($event, 'year')"
+              @wheel.prevent="onWheelScroll($event, 'year')"
+            >
+              <div class="wheel-mask">
+                <div
+                  v-for="item in yearItems"
+                  :key="item.key"
+                  class="wheel-item"
+                  :class="{ active: item.active }"
+                  :style="itemStyle(item)"
+                >{{ item.label }}</div>
+                <div class="wheel-center"></div>
+              </div>
+              <div class="wheel-caption">年</div>
             </div>
-            <button class="btn btn-secondary year-shift" @click="shiftYears(1)">›</button>
-          </div>
-          <div class="month-grid">
-            <button
-              v-for="m in 12"
-              :key="m"
-              :class="['month-btn', m - 1 === pickMonth ? 'active' : '']"
-              @click="pickMonth = m - 1"
-            >{{ m }}月</button>
+            <div
+              class="wheel"
+              @pointerdown.prevent="wheelDown($event, 'month')"
+              @wheel.prevent="onWheelScroll($event, 'month')"
+            >
+              <div class="wheel-mask">
+                <div
+                  v-for="item in monthItems"
+                  :key="item.key"
+                  class="wheel-item"
+                  :class="{ active: item.active }"
+                  :style="itemStyle(item)"
+                >{{ item.label }}</div>
+                <div class="wheel-center"></div>
+              </div>
+              <div class="wheel-caption">月</div>
+            </div>
           </div>
           <div class="picker-actions">
             <button class="btn btn-secondary" @click="showDatePicker = false">取消</button>
@@ -133,16 +149,87 @@ const monthDates = ref<string[]>([]);
 const dayMenu = ref<MenuByDate | null>(null);
 const selectedDate = ref('');
 
-// 年月快速选择弹窗
+// 年月快速选择弹窗（滚轮式）
 const showDatePicker = ref(false);
-const pickYear = ref(currentYear.value);
-const pickMonth = ref(currentMonth.value);
-const yearBase = ref(currentYear.value); // 年份窗口基准
-const yearList = computed(() => {
-  const arr: number[] = [];
-  for (let i = 0; i < 10; i++) arr.push(yearBase.value - 5 + i);
-  return arr;
-});
+const ITEM_H = 40; // 滚轮每行高度 px
+const yearOffset = ref(currentYear.value); // 年份偏移（连续值，拖拽时可为小数）
+const monthOffset = ref(currentMonth.value); // 月份偏移（连续值，可无限循环）
+
+const pickYear = computed(() => Math.round(yearOffset.value));
+const pickMonth = computed(() => ((Math.round(monthOffset.value) % 12) + 12) % 12);
+
+// 生成滚轮当前窗口内的可见项（中心 ±2 行），wrap=true 时按 12 取模实现无限循环
+function wheelItems(offset: number, formatter: (display: number) => string, wrap = false) {
+  const c = Math.round(offset);
+  const items: { key: string; label: string; y: number; active: boolean; dist: number }[] = [];
+  for (let i = -2; i <= 2; i++) {
+    const v = c + i;
+    const disp = wrap ? ((v % 12) + 12) % 12 : v;
+    items.push({
+      key: `${wrap ? 'm' : 'y'}-${v}`,
+      label: formatter(disp),
+      y: (v - offset) * ITEM_H,
+      active: v === c,
+      dist: Math.abs(v - offset)
+    });
+  }
+  return items;
+}
+
+const yearItems = computed(() => wheelItems(yearOffset.value, (v: number) => `${v}年`));
+const monthItems = computed(() => wheelItems(monthOffset.value, (v: number) => `${v + 1}月`, true));
+
+// 根据距中心的距离计算位移与透明度
+function itemStyle(item: { y: number; dist: number }) {
+  const opacity = Math.max(0.2, 1 - item.dist * 0.18);
+  const scale = Math.max(0.85, 1 - item.dist * 0.06);
+  return { transform: `translateY(${item.y}px) scale(${scale})`, opacity };
+}
+
+// 触摸/鼠标拖拽选择
+let dragType: 'year' | 'month' | null = null;
+let dragStartY = 0;
+let dragStartOffset = 0;
+
+function offsetOf(type: 'year' | 'month') {
+  return type === 'year' ? yearOffset.value : monthOffset.value;
+}
+
+function wheelDown(e: PointerEvent, type: 'year' | 'month') {
+  dragType = type;
+  dragStartY = e.clientY;
+  dragStartOffset = offsetOf(type);
+  window.addEventListener('pointermove', onWheelMove);
+  window.addEventListener('pointerup', onWheelUp);
+  window.addEventListener('pointercancel', onWheelUp);
+  e.preventDefault();
+}
+
+function onWheelMove(e: PointerEvent) {
+  if (!dragType) return;
+  const o = dragStartOffset - (e.clientY - dragStartY) / ITEM_H;
+  if (dragType === 'year') yearOffset.value = o;
+  else monthOffset.value = o;
+}
+
+function onWheelUp() {
+  if (!dragType) return;
+  const snapped = Math.round(offsetOf(dragType));
+  if (dragType === 'year') yearOffset.value = snapped;
+  else monthOffset.value = ((snapped % 12) + 12) % 12; // 取模后回到 [0,12)，避免偏移无限增大
+  dragType = null;
+  window.removeEventListener('pointermove', onWheelMove);
+  window.removeEventListener('pointerup', onWheelUp);
+  window.removeEventListener('pointercancel', onWheelUp);
+}
+
+// 桌面端鼠标滚轮选择（hover 到对应滚轮时）
+function onWheelScroll(e: WheelEvent, type: 'year' | 'month') {
+  const cur = Math.round(offsetOf(type));
+  const next = cur + (e.deltaY > 0 ? 1 : -1);
+  if (type === 'year') yearOffset.value = next;
+  else monthOffset.value = ((next % 12) + 12) % 12;
+}
 
 const waterfall = ref<any[]>([]);
 const waterPage = ref(1);
@@ -201,14 +288,9 @@ function shiftMonth(delta: number) {
 }
 
 function openDatePicker() {
-  pickYear.value = currentYear.value;
-  pickMonth.value = currentMonth.value;
-  yearBase.value = currentYear.value;
+  yearOffset.value = currentYear.value;
+  monthOffset.value = currentMonth.value;
   showDatePicker.value = true;
-}
-
-function shiftYears(delta: number) {
-  yearBase.value += delta * 10;
 }
 
 function confirmDatePicker() {
@@ -350,20 +432,28 @@ onUnmounted(() => {
   width: 100%; max-width: 420px;
 }
 .date-picker-title { margin: 0 0 16px 0; text-align: center; }
-.picker-years { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-.year-shift { padding: 8px 12px; min-height: 36px; }
-.year-list { display: flex; gap: 6px; overflow-x: auto; flex: 1; padding: 2px 0; }
-.year-btn {
-  flex: 0 0 auto; padding: 6px 12px; border: 1px solid #ddd; border-radius: 8px;
-  background: white; cursor: pointer; font-size: 14px;
+.picker-wheels { display: flex; gap: 12px; margin-bottom: 20px; }
+.wheel {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  user-select: none; -webkit-user-select: none;
 }
-.year-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
-.month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
-.month-btn {
-  padding: 10px 0; border: 1px solid #ddd; border-radius: 8px; background: white;
-  cursor: pointer; font-size: 14px;
+.wheel-mask {
+  position: relative; width: 100%; height: 200px; overflow: hidden;
+  touch-action: none;
 }
-.month-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+.wheel-item {
+  position: absolute; left: 0; right: 0; top: 50%;
+  height: 40px; line-height: 40px; margin-top: -20px;
+  text-align: center; font-size: 17px; color: #333;
+  will-change: transform, opacity;
+}
+.wheel-item.active { color: #4a90d9; font-weight: 600; }
+.wheel-center {
+  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  height: 40px; border-top: 1px solid #eee; border-bottom: 1px solid #eee;
+  background: rgba(74, 144, 217, 0.06); pointer-events: none;
+}
+.wheel-caption { font-size: 13px; color: #666; }
 .picker-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 .day-detail { background: white; border-radius: 12px; padding: 16px; }
