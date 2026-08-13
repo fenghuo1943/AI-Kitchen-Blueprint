@@ -9,6 +9,16 @@
       </form>
     </div>
 
+    <!-- 移动端快捷入口（搜索按钮下方） -->
+    <section class="section mobile-quick" v-if="isMobile">
+      <div class="features">
+        <router-link to="/rag" class="feature-card"><div class="feature-icon">🔍</div><h3>AI检索</h3></router-link>
+        <router-link to="/ai-collect" class="feature-card"><div class="feature-icon">📥</div><h3>AI采集</h3></router-link>
+        <router-link to="/inventory" class="feature-card"><div class="feature-icon">🥬</div><h3>库存管理</h3></router-link>
+        <router-link to="/recommend" class="feature-card"><div class="feature-icon">🤖</div><h3>智能推荐</h3></router-link>
+      </div>
+    </section>
+
     <!-- 今日推荐 -->
     <section class="section" v-if="today.length">
       <div class="section-head">
@@ -43,8 +53,8 @@
       </div>
     </section>
 
-    <!-- 快捷入口 -->
-    <section class="section">
+    <!-- 桌面端快捷入口 -->
+    <section class="section" v-if="!isMobile">
       <div class="features">
         <router-link to="/recipes" class="feature-card"><div class="feature-icon">📚</div><h3>菜谱库</h3><p>筛选和管理菜谱</p></router-link>
         <router-link to="/menu" class="feature-card"><div class="feature-icon">📅</div><h3>菜单</h3><p>安排每日菜谱</p></router-link>
@@ -62,11 +72,13 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import RecipeCard from '../components/RecipeCard.vue';
 import AddToMenuModal from '../components/AddToMenuModal.vue';
+import { useResponsive } from '../composables/useResponsive';
 import { discoverApi, favoriteApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { DiscoverRecipe, Recipe } from '../types';
 
 const router = useRouter();
+const { isMobile } = useResponsive();
 const keyword = ref('');
 const today = ref<DiscoverRecipe[]>([]);
 const latest = ref<DiscoverRecipe[]>([]);
@@ -151,7 +163,10 @@ onMounted(loadRecommendations);
   .search-box { flex-direction: column; gap: 8px; }
   .search-box .btn { width: 100%; }
   .card-grid { grid-template-columns: 1fr; gap: 10px; }
-  .features { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .feature-card { padding: 16px 12px; }
+  .features { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .feature-card { padding: 12px 4px; text-align: center; }
+  .feature-icon { font-size: 1.4rem; margin-bottom: 4px; }
+  .feature-card h3 { margin: 0; font-size: 0.78rem; }
+  .mobile-quick { margin-bottom: 16px; }
 }
 </style>

@@ -17,15 +17,19 @@
 
       <!-- 桌面端导航链接 -->
       <div class="nav-links" :class="{ 'mobile-open': isMobileMenuOpen }" v-if="!isMobile || isMobileMenuOpen">
-        <router-link to="/recipes" @click="closeMobileMenu">菜谱库</router-link>
-        <router-link to="/menu" @click="closeMobileMenu">菜单</router-link>
-        <router-link to="/discover" @click="closeMobileMenu">发现</router-link>
-        <router-link to="/me" @click="closeMobileMenu">我的</router-link>
+        <!-- 主页（仅桌面端显示） -->
+        <router-link v-if="!isMobile" to="/" @click="closeMobileMenu">主页</router-link>
+        <!-- 常规导航（仅桌面端显示，移动端从汉堡菜单移除） -->
+        <router-link v-if="!isMobile" to="/recipes" @click="closeMobileMenu">菜谱库</router-link>
+        <router-link v-if="!isMobile" to="/menu" @click="closeMobileMenu">菜单</router-link>
+        <router-link v-if="!isMobile" to="/discover" @click="closeMobileMenu">发现</router-link>
+        <!-- 核心功能（桌面导航 + 移动端汉堡菜单均显示） -->
         <router-link to="/inventory" @click="closeMobileMenu">库存管理</router-link>
         <router-link to="/recommend" @click="closeMobileMenu">智能推荐</router-link>
         <router-link to="/rag" @click="closeMobileMenu">AI 检索</router-link>
         <router-link to="/ai-collect" @click="closeMobileMenu">AI 采集</router-link>
-        <router-link to="/ingredients" @click="closeMobileMenu">食材管理</router-link>
+        <!-- 我的（仅桌面端显示） -->
+        <router-link v-if="!isMobile" to="/me" @click="closeMobileMenu">我的</router-link>
       </div>
     </nav>
 
