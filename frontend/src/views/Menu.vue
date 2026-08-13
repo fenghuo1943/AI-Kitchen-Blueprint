@@ -11,7 +11,7 @@
     <div v-if="mode === 'calendar'">
       <div class="calendar-nav">
         <button class="btn btn-secondary" @click="shiftMonth(-1)">‹ 上月</button>
-        <span class="month-title">{{ currentMonth }}</span>
+        <span class="month-title" @click="openDatePicker">{{ currentMonthLabel }} ▾</span>
         <button class="btn btn-secondary" @click="shiftMonth(1)">下月 ›</button>
       </div>
       <div class="calendar">
@@ -59,6 +59,37 @@
         </div>
         <div v-else class="empty-day">当天没有安排菜谱</div>
       </div>
+
+      <!-- 年月快速选择弹窗 -->
+      <div v-if="showDatePicker" class="date-picker-mask" @click.self="showDatePicker = false">
+        <div class="date-picker">
+          <h3 class="date-picker-title">选择年月</h3>
+          <div class="picker-years">
+            <button class="btn btn-secondary year-shift" @click="shiftYears(-1)">‹</button>
+            <div class="year-list">
+              <button
+                v-for="y in yearList"
+                :key="y"
+                :class="['year-btn', y === pickYear ? 'active' : '']"
+                @click="pickYear = y"
+              >{{ y }}</button>
+            </div>
+            <button class="btn btn-secondary year-shift" @click="shiftYears(1)">›</button>
+          </div>
+          <div class="month-grid">
+            <button
+              v-for="m in 12"
+              :key="m"
+              :class="['month-btn', m - 1 === pickMonth ? 'active' : '']"
+              @click="pickMonth = m - 1"
+            >{{ m }}月</button>
+          </div>
+          <div class="picker-actions">
+            <button class="btn btn-secondary" @click="showDatePicker = false">取消</button>
+            <button class="btn btn-primary" @click="confirmDatePicker">确定</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 瀑布流模式 -->
@@ -101,6 +132,17 @@ const currentMonth = ref(today.getMonth()); // 0-11
 const monthDates = ref<string[]>([]);
 const dayMenu = ref<MenuByDate | null>(null);
 const selectedDate = ref('');
+
+// 年月快速选择弹窗
+const showDatePicker = ref(false);
+const pickYear = ref(currentYear.value);
+const pickMonth = ref(currentMonth.value);
+const yearBase = ref(currentYear.value); // 年份窗口基准
+const yearList = computed(() => {
+  const arr: number[] = [];
+  for (let i = 0; i < 10; i++) arr.push(yearBase.value - 5 + i);
+  return arr;
+});
 
 const waterfall = ref<any[]>([]);
 const waterPage = ref(1);
@@ -155,6 +197,24 @@ function shiftMonth(delta: number) {
   const d = new Date(currentYear.value, currentMonth.value + delta, 1);
   currentYear.value = d.getFullYear();
   currentMonth.value = d.getMonth();
+  loadMonth();
+}
+
+function openDatePicker() {
+  pickYear.value = currentYear.value;
+  pickMonth.value = currentMonth.value;
+  yearBase.value = currentYear.value;
+  showDatePicker.value = true;
+}
+
+function shiftYears(delta: number) {
+  yearBase.value += delta * 10;
+}
+
+function confirmDatePicker() {
+  currentYear.value = pickYear.value;
+  currentMonth.value = pickMonth.value;
+  showDatePicker.value = false;
   loadMonth();
 }
 
@@ -258,7 +318,7 @@ onUnmounted(() => {
 .mode-btn.active { background: #4a90d9; color: white; }
 
 .calendar-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.month-title { font-size: 1.1rem; font-weight: 600; }
+.month-title { font-size: 1.1rem; font-weight: 600; cursor: pointer; user-select: none; }
 
 .calendar {
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
@@ -266,17 +326,45 @@ onUnmounted(() => {
 }
 .weekday { text-align: center; font-size: 12px; color: #888; padding: 6px 0; }
 .day {
-  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   border-radius: 8px; cursor: pointer; position: relative; font-size: 14px;
+  height: 36px;
 }
 .day.blank { cursor: default; }
 .day.has-menu { background: #fff3cd; }
 .day.today { outline: 2px solid #4a90d9; }
 .day.selected { background: #4a90d9; color: white; }
 .day.has-menu::after {
-  content: ''; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+  content: ''; position: static; transform: none; margin-left: 4px;
   width: 5px; height: 5px; border-radius: 50%; background: #f44336;
 }
+
+.date-picker-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 16px;
+}
+.date-picker {
+  background: white; border-radius: 12px; padding: 24px;
+  width: 100%; max-width: 420px;
+}
+.date-picker-title { margin: 0 0 16px 0; text-align: center; }
+.picker-years { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.year-shift { padding: 8px 12px; min-height: 36px; }
+.year-list { display: flex; gap: 6px; overflow-x: auto; flex: 1; padding: 2px 0; }
+.year-btn {
+  flex: 0 0 auto; padding: 6px 12px; border: 1px solid #ddd; border-radius: 8px;
+  background: white; cursor: pointer; font-size: 14px;
+}
+.year-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+.month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+.month-btn {
+  padding: 10px 0; border: 1px solid #ddd; border-radius: 8px; background: white;
+  cursor: pointer; font-size: 14px;
+}
+.month-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+.picker-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 .day-detail { background: white; border-radius: 12px; padding: 16px; }
 .day-detail h2 { margin: 0 0 12px 0; font-size: 1.1rem; }
@@ -314,6 +402,7 @@ onUnmounted(() => {
 .load-more .end { color: #bbb; }
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
+.btn-primary { background: #4a90d9; color: white; }
 .btn-secondary { background: #f0f0f0; color: #333; }
 .btn-small { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
 .btn-danger { background: #f44336; color: white; }
@@ -326,6 +415,11 @@ onUnmounted(() => {
   .mode-switch { width: 100%; }
   .mode-btn { flex: 1; }
   .calendar { padding: 8px; gap: 2px; }
-  .day { font-size: 13px; }
+  .day { font-size: 13px; aspect-ratio: 1; height: auto; }
+  .day.has-menu::after {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); margin-left: 0;
+  }
+  .date-picker-mask { padding: 0; align-items: flex-end; }
+  .date-picker { border-radius: 12px 12px 0 0; max-height: 90vh; overflow-y: auto; }
 }
 </style>
