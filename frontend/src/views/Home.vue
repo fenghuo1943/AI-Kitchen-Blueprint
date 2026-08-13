@@ -150,7 +150,7 @@ onMounted(loadRecommendations);
   .subtitle { font-size: 1rem; margin-bottom: 16px; }
   .search-box { flex-direction: column; gap: 8px; }
   .search-box .btn { width: 100%; }
-  .card-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card-grid { grid-template-columns: 1fr; gap: 10px; }
   .features { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .feature-card { padding: 16px 12px; }
 }
