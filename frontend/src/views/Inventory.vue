@@ -8,7 +8,7 @@
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
-        <h1>🥬 库存管理</h1>
+        <h1>库存管理</h1>
       </div>
       <button @click="showAddModal = true" class="btn btn-primary">添加库存</button>
     </div>

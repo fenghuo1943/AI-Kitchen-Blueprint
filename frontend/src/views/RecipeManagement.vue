@@ -8,7 +8,7 @@
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
-        <h1>📖 菜谱管理</h1>
+        <h1>菜谱管理</h1>
         <button @click="goCreate" class="btn btn-primary btn-sm">新建菜谱</button>
       </div>
     </div>

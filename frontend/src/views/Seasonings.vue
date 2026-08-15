@@ -8,34 +8,66 @@
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
-        <h1>🧂 调料管理</h1>
+        <h1>调料管理</h1>
       </div>
-      <router-link to="/categories" class="btn btn-secondary">分类管理</router-link>
+      <button @click="openCreate" class="btn btn-primary">添加调料</button>
     </div>
 
-    <div class="search-row">
-      <input v-model="query" type="text" placeholder="搜索调料 / 拼音" @input="debouncedSearch" />
-    </div>
-
-    <div class="add-row">
-      <input v-model="newName" type="text" placeholder="输入调料名称" />
-      <select v-model="newCategoryId">
-        <option value="">默认分类</option>
+    <div class="filters">
+      <input
+        v-model="query"
+        type="text"
+        placeholder="搜索调料..."
+        @input="debouncedSearch"
+      />
+      <select v-model="categoryFilter" @change="load">
+        <option value="">全部分类</option>
         <option v-for="c in seaCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
       </select>
-      <button class="btn btn-primary" @click="create" :disabled="!newName.trim()">添加</button>
     </div>
 
-    <div class="list">
-      <div v-for="s in seasonings" :key="s.id" class="list-row">
-        <div class="row-main">
-          <span class="row-title">{{ s.canonical_name }}</span>
-          <span class="row-sub">{{ s.category_name || '默认分类' }} · {{ s.pinyin }}</span>
+    <div class="list" v-if="seasonings.length > 0">
+      <div v-for="s in seasonings" :key="s.id" class="seasoning-card">
+        <div class="card-main" @click="openEdit(s)">
+          <div class="seasoning-header">
+            <h3>{{ s.canonical_name }}</h3>
+            <span class="category-badge">{{ s.category_name || '默认分类' }}</span>
+          </div>
         </div>
-        <button class="btn-small btn-danger" @click="remove(s)">删除</button>
+        <div class="seasoning-actions">
+          <button @click="remove(s)" class="btn-small btn-danger">删除</button>
+        </div>
       </div>
     </div>
-    <div v-if="!seasonings.length" class="empty-state">暂无调料</div>
+
+    <div v-else class="empty-state">
+      <p>暂无调料</p>
+      <button @click="openCreate" class="btn btn-primary">添加第一个调料</button>
+    </div>
+
+    <!-- 创建/编辑调料弹窗 -->
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+      <div class="modal">
+        <h2>{{ editingSeasoning ? '编辑调料' : '添加调料' }}</h2>
+        <form @submit.prevent="saveSeasoning">
+          <div class="form-group">
+            <label>标准名称 *</label>
+            <input v-model="seasoningForm.canonical_name" type="text" required />
+          </div>
+          <div class="form-group">
+            <label>分类</label>
+            <select v-model="seasoningForm.category_id">
+              <option value="">默认分类</option>
+              <option v-for="c in seaCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" @click="closeModal" class="btn btn-secondary">取消</button>
+            <button type="submit" class="btn btn-primary" :disabled="!seasoningForm.canonical_name.trim()">{{ editingSeasoning ? '保存' : '添加' }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -51,8 +83,14 @@ const { goBack } = useGoBack('/me');
 const seasonings = ref<Seasoning[]>([]);
 const seaCategories = ref<Category[]>([]);
 const query = ref('');
-const newName = ref('');
-const newCategoryId = ref('');
+const categoryFilter = ref('');
+const showModal = ref(false);
+const editingSeasoning = ref<Seasoning | null>(null);
+
+const seasoningForm = ref({
+  canonical_name: '',
+  category_id: ''
+});
 
 let timer: ReturnType<typeof setTimeout>;
 function debouncedSearch() {
@@ -62,7 +100,12 @@ function debouncedSearch() {
 
 async function load() {
   try {
-    const res = await seasoningApi.list({ query: query.value || undefined, page: 1, page_size: 100 });
+    const res = await seasoningApi.list({
+      query: query.value || undefined,
+      category_id: categoryFilter.value || undefined,
+      page: 1,
+      page_size: 100
+    });
     seasonings.value = res.data;
   } catch (e) {
     console.error('load seasonings failed', e);
@@ -78,16 +121,48 @@ async function loadCategories() {
   }
 }
 
-async function create() {
-  const name = newName.value.trim();
+function openCreate() {
+  editingSeasoning.value = null;
+  seasoningForm.value = { canonical_name: '', category_id: '' };
+  showModal.value = true;
+}
+
+function openEdit(s: Seasoning) {
+  editingSeasoning.value = s;
+  seasoningForm.value = {
+    canonical_name: s.canonical_name,
+    category_id: s.category_id || ''
+  };
+  showModal.value = true;
+}
+
+function closeModal() {
+  showModal.value = false;
+  editingSeasoning.value = null;
+  seasoningForm.value = { canonical_name: '', category_id: '' };
+}
+
+async function saveSeasoning() {
+  const name = seasoningForm.value.canonical_name.trim();
   if (!name) return;
   try {
-    await seasoningApi.create({ canonical_name: name, category_id: newCategoryId.value || undefined });
-    toast('已添加');
-    newName.value = '';
+    if (editingSeasoning.value) {
+      await seasoningApi.update(editingSeasoning.value.id, {
+        canonical_name: name,
+        category_id: seasoningForm.value.category_id || undefined
+      });
+      toast('已保存');
+    } else {
+      await seasoningApi.create({
+        canonical_name: name,
+        category_id: seasoningForm.value.category_id || undefined
+      });
+      toast('已添加');
+    }
+    closeModal();
     load();
   } catch (e: any) {
-    toast(e?.response?.data?.detail || '添加失败', 'error');
+    toast(e?.response?.data?.detail || '保存失败', 'error');
   }
 }
 
@@ -107,6 +182,7 @@ onMounted(() => { load(); loadCategories(); });
 
 <style scoped>
 .seasonings { padding: 20px; }
+
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .header h1 { margin: 0; }
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
@@ -124,31 +200,91 @@ onMounted(() => { load(); loadCategories(); });
   flex-shrink: 0;
 }
 .btn-back:hover { background: rgba(7, 132, 255, 0.08); }
-.search-row, .add-row { display: flex; gap: 10px; margin-bottom: 12px; }
-.search-row input, .add-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 44px; font-size: 16px; }
-.add-row select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 44px; }
 
-.list { background: white; border-radius: 12px; overflow: hidden; }
-.list-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #f0f0f0; }
-.row-main { display: flex; flex-direction: column; gap: 2px; }
-.row-title { font-weight: 500; }
-.row-sub { font-size: 12px; color: #999; }
+.filters { display: flex; gap: 10px; margin-bottom: 16px; }
+.filters input,
+.filters select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; min-height: 44px; box-sizing: border-box; }
+.filters input { flex: 1; }
+.filters select { flex-shrink: 0; }
+
+.list { display: grid; gap: 12px; }
+.seasoning-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.card-main { flex: 1; min-width: 0; cursor: pointer; }
+.card-main:active { opacity: 0.75; }
+
+.seasoning-header { display: flex; align-items: center; gap: 8px; }
+.seasoning-header h3 { margin: 0; color: #333; font-size: 16px; }
+.category-badge { background: #f0f0f0; padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #666; }
+
+.seasoning-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+.empty-state { text-align: center; padding: 60px 20px; color: #888; }
+.empty-state p { margin: 0 0 16px; }
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; }
 .btn-primary { background: #4a90d9; color: white; }
+.btn-primary:hover { background: #357abd; }
 .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-.btn-secondary { background: #f0f0f0; color: #333; }
-.btn-small { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
-.btn-danger { background: #f44336; color: white; }
-.empty-state { text-align: center; padding: 40px 20px; color: #888; }
+.btn-secondary { background: #e0e0e0; color: #333; }
+.btn-secondary:hover { background: #d0d0d0; }
+.btn-small { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; white-space: nowrap; }
+.btn-danger { background: #dc3545; color: white; }
+.btn-danger:hover { background: #c82333; }
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal h2 { margin: 0 0 20px 0; color: #333; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; font-size: 14px; color: #555; }
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+  box-sizing: border-box;
+  min-height: 44px;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 @media (max-width: 767px) {
   .seasonings { padding: 16px; }
-  .header h1 { text-align: center; }
+  .header h1 { text-align: center; font-size: 1.5rem; }
   .header-left { justify-content: center; position: relative; width: 100%; }
   .btn-back { position: absolute; left: 0; }
-  .add-row { flex-wrap: wrap; }
-  .add-row input { flex-basis: 100%; }
-  .add-row select { flex: 1; }
+  .filters { flex-direction: row; gap: 8px; align-items: center; }
+  .filters input { flex: 1; min-width: 0; }
+  .seasoning-card { padding: 12px; gap: 8px; }
+  .seasoning-header { flex-wrap: wrap; }
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: 12px 12px 0 0; max-height: 95vh; padding: 24px 16px; }
+  .modal-actions { flex-direction: column; gap: 8px; }
+  .modal-actions .btn { width: 100%; }
 }
 </style>

@@ -8,7 +8,7 @@
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
-        <h1>🧅 食材管理</h1>
+        <h1>食材管理</h1>
       </div>
       <button @click="showCreateModal = true" class="btn btn-primary">添加食材</button>
     </div>
@@ -28,31 +28,32 @@
 
     <div class="ingredient-list" v-if="ingredients.length > 0">
       <div v-for="ing in ingredients" :key="ing.id" class="ingredient-card">
-        <div class="ingredient-header">
-          <h3>{{ ing.canonical_name }}</h3>
-          <span class="category-badge">{{ ing.category_name || ing.category || '未分类' }}</span>
-        </div>
-        <div class="ingredient-details">
-          <div class="detail-item" v-if="ing.pinyin">
-            <span class="label">拼音:</span>
-            <span>{{ ing.pinyin }}</span>
+        <div class="card-main" @click="editIngredient(ing)">
+          <div class="ingredient-header">
+            <h3>{{ ing.canonical_name }}</h3>
+            <span class="category-badge">{{ ing.category_name || ing.category || '未分类' }}</span>
           </div>
-          <div v-if="ing.season_months && ing.season_months.length > 0" class="detail-item">
-            <span class="label">应季月份:</span>
-            <span>{{ ing.season_months.join(', ') }}月</span>
-          </div>
-          <div v-if="ing.allergens && ing.allergens.length > 0" class="detail-item">
-            <span class="label">过敏原:</span>
-            <span class="allergen">{{ ing.allergens.join(', ') }}</span>
-          </div>
-          <div v-if="ing.aliases.length > 0" class="detail-item">
-            <span class="label">别名:</span>
-            <span>{{ ing.aliases.map(a => a.alias).join(', ') }}</span>
+          <div class="ingredient-details">
+            <div class="detail-item" v-if="ing.pinyin">
+              <span class="label">拼音:</span>
+              <span>{{ ing.pinyin }}</span>
+            </div>
+            <div v-if="ing.season_months && ing.season_months.length > 0" class="detail-item">
+              <span class="label">应季月份:</span>
+              <span>{{ ing.season_months.join(', ') }}月</span>
+            </div>
+            <div v-if="ing.allergens && ing.allergens.length > 0" class="detail-item">
+              <span class="label">过敏原:</span>
+              <span class="allergen">{{ ing.allergens.join(', ') }}</span>
+            </div>
+            <div v-if="ing.aliases.length > 0" class="detail-item">
+              <span class="label">别名:</span>
+              <span>{{ ing.aliases.map(a => a.alias).join(', ') }}</span>
+            </div>
           </div>
         </div>
         <div class="ingredient-actions">
-          <button @click="editIngredient(ing)" class="btn btn-small">编辑</button>
-          <button @click="showAddAlias(ing)" class="btn btn-small">添加别名</button>
+          <button @click="openAliasEditor(ing)" class="btn btn-small btn-primary">编辑别名</button>
           <button @click="deleteIngredient(ing.id)" class="btn btn-small btn-danger">删除</button>
         </div>
       </div>
@@ -101,18 +102,25 @@
       </div>
     </div>
 
-    <!-- 添加别名弹窗 -->
+    <!-- 编辑别名弹窗 -->
     <div v-if="showAliasModal" class="modal-overlay" @click.self="showAliasModal = false">
       <div class="modal">
-        <h2>添加别名 - {{ aliasIngredient?.canonical_name }}</h2>
+        <h2>编辑别名 - {{ aliasIngredient?.canonical_name }}</h2>
+        <div class="alias-list" v-if="aliasIngredient?.aliases?.length">
+          <div v-for="a in aliasIngredient.aliases" :key="a.id" class="alias-item">
+            <span>{{ a.alias }}</span>
+            <button @click="removeAlias(a)" class="btn-small btn-danger">删除</button>
+          </div>
+        </div>
+        <p v-else class="empty-alias">暂无别名</p>
         <form @submit.prevent="addAlias">
           <div class="form-group">
-            <label>别名 *</label>
-            <input v-model="aliasName" type="text" required />
+            <label>新增别名</label>
+            <input v-model="aliasName" type="text" placeholder="输入新别名" />
           </div>
           <div class="modal-actions">
-            <button type="button" @click="showAliasModal = false" class="btn btn-secondary">取消</button>
-            <button type="submit" class="btn btn-primary">添加</button>
+            <button type="button" @click="showAliasModal = false" class="btn btn-secondary">关闭</button>
+            <button type="submit" class="btn btn-primary" :disabled="!aliasName.trim()">添加</button>
           </div>
         </form>
       </div>
@@ -125,7 +133,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { ingredientApi, categoryApi } from '../services/api';
 import { toast } from '../composables/useToast';
-import type { Ingredient, Category } from '../types';
+import type { Ingredient, IngredientAlias, Category } from '../types';
 
 const { goBack } = useGoBack('/me');
 
@@ -198,7 +206,7 @@ function editIngredient(ing: Ingredient) {
   showCreateModal.value = true;
 }
 
-function showAddAlias(ing: Ingredient) {
+function openAliasEditor(ing: Ingredient) {
   aliasIngredient.value = ing;
   aliasName.value = '';
   showAliasModal.value = true;
@@ -234,15 +242,33 @@ async function saveIngredient() {
 }
 
 async function addAlias() {
-  if (!aliasIngredient.value || !aliasName.value) return;
+  if (!aliasIngredient.value || !aliasName.value.trim()) return;
   try {
-    await ingredientApi.addAlias(aliasIngredient.value.id, aliasName.value);
+    await ingredientApi.addAlias(aliasIngredient.value.id, aliasName.value.trim());
     toast('别名已添加');
-    showAliasModal.value = false;
-    loadIngredients();
+    aliasName.value = '';
+    await loadIngredients();
+    refreshAliasIngredient();
   } catch (error: any) {
     toast(error?.response?.data?.detail || '添加别名失败', 'error');
   }
+}
+
+async function removeAlias(alias: IngredientAlias) {
+  if (!aliasIngredient.value) return;
+  if (!confirm(`确定删除别名「${alias.alias}」吗？`)) return;
+  try {
+    await ingredientApi.removeAlias(alias.id);
+    toast('别名已删除');
+    await loadIngredients();
+    refreshAliasIngredient();
+  } catch (error: any) {
+    toast(error?.response?.data?.detail || '删除别名失败', 'error');
+  }
+}
+
+function refreshAliasIngredient() {
+  aliasIngredient.value = ingredients.value.find(i => i.id === aliasIngredient.value?.id) ?? null;
 }
 
 async function deleteIngredient(id: string) {
@@ -349,16 +375,29 @@ onMounted(() => {
 }
 
 .ingredient-card {
+  display: flex;
+  gap: 12px;
   background: white;
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.card-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.card-main:active {
+  opacity: 0.75;
+}
+
 .ingredient-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: row;
   align-items: center;
+  gap: 6px;
   margin-bottom: 12px;
 }
 
@@ -395,9 +434,51 @@ onMounted(() => {
   font-weight: 500;
 }
 
+.alias-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.alias-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.alias-item span {
+  font-size: 14px;
+  color: #333;
+}
+
+.alias-item .btn-small {
+  flex-shrink: 0;
+}
+
+.empty-alias {
+  color: #888;
+  font-size: 14px;
+  text-align: center;
+  padding: 12px 0;
+  margin-bottom: 16px;
+}
+
 .ingredient-actions {
   display: flex;
+  flex-direction: row;
   gap: 8px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.ingredient-actions .btn-small {
+  white-space: nowrap;
+  padding: 5px 14px;
+  min-height: 30px;
 }
 
 .empty-state {
@@ -526,9 +607,9 @@ onMounted(() => {
   }
 
   .header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
   }
 
   .header h1 {
@@ -540,7 +621,8 @@ onMounted(() => {
   .header-left {
     justify-content: center;
     position: relative;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 
   .btn-back {
@@ -549,22 +631,31 @@ onMounted(() => {
   }
 
   .header .btn {
-    width: 100%;
+    flex-shrink: 0;
+    width: auto;
   }
 
   .filters {
-    flex-direction: column;
+    flex-direction: row;
     gap: 8px;
+    align-items: center;
   }
 
-  .filters input,
-  .filters select {
-    width: 100%;
+  .filters input {
+    flex: 1;
+    min-width: 0;
     min-height: 44px;
   }
 
+  .filters select {
+    width: auto;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
   .ingredient-card {
-    padding: 16px;
+    padding: 12px;
+    gap: 8px;
   }
 
   .ingredient-header {
@@ -578,13 +669,15 @@ onMounted(() => {
   }
 
   .ingredient-actions {
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
   }
 
-  .ingredient-actions .btn {
-    flex: 1;
-    min-width: calc(50% - 4px);
+  .ingredient-actions .btn-small {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-height: 28px;
   }
 
   .pagination {
