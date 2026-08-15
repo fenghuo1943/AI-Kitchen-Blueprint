@@ -5,6 +5,8 @@ from sqlalchemy.pool import QueuePool
 from contextlib import contextmanager
 from typing import Generator, Optional
 import logging
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +80,57 @@ def get_db_context():
         db.close()
 
 
-def init_db():
-    """初始化数据库表结构"""
-    Base.metadata.create_all(bind=get_engine())
-    logger.info("数据库表初始化完成")
+def init_db(retries: Optional[int] = None, interval: Optional[float] = None) -> bool:
+    """初始化数据库表结构（带重试，数据库未就绪时不会立刻崩溃）。
+
+    启动阶段数据库可能尚未就绪（如 NAS 刚开机、DB 机器未起），
+    按间隔重试多次；重试耗尽返回 False（不再抛异常），配合降级模式避免容器崩溃循环。
+
+    返回 True 表示初始化成功，False 表示数据库仍不可用。
+    """
+    from app.core.config import settings
+
+    retries = retries if retries is not None else settings.DB_RETRY_ATTEMPTS
+    interval = interval if interval is not None else settings.DB_RETRY_INTERVAL
+
+    for attempt in range(1, retries + 1):
+        try:
+            Base.metadata.create_all(bind=get_engine())
+            logger.info("数据库表初始化完成")
+            return True
+        except Exception as exc:
+            logger.warning(f"数据库连接失败（第 {attempt}/{retries} 次）：{exc}")
+            if attempt < retries:
+                time.sleep(interval)
+
+    logger.error(
+        f"数据库初始化失败：请检查 DB_HOST/DB_PORT/DB_USER/DB_PASSWORD 及数据库是否可达"
+    )
+    return False
+
+
+_db_retry_thread: Optional[threading.Thread] = None
+
+
+def start_db_retry_loop(interval: Optional[float] = None) -> None:
+    """后台线程持续重试数据库连接，直到可用（降级模式自愈，进程退出自动结束）。"""
+    global _db_retry_thread
+    if _db_retry_thread is not None and _db_retry_thread.is_alive():
+        return
+
+    from app.core.config import settings
+
+    interval = interval if interval is not None else settings.DB_BG_RETRY_INTERVAL
+
+    def _loop() -> None:
+        while True:
+            if init_db(retries=1):
+                logger.info("数据库已恢复，应用进入正常模式")
+                return
+            time.sleep(interval)
+
+    _db_retry_thread = threading.Thread(target=_loop, daemon=True, name="db-retry")
+    _db_retry_thread.start()
 
 
 def drop_all_tables():

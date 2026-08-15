@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.db.database import init_db
+from app.db.database import init_db, start_db_retry_loop
 from app.api.recipes import router as recipes_router
 from app.api.ingredients import router as ingredients_router
 from app.api.inventory import router as inventory_router
@@ -34,10 +34,13 @@ async def lifespan(app: FastAPI):
     logger.info("应用启动中...")
     logger.info(f"数据库连接: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
 
-    # 初始化数据库
+    # 初始化数据库：连不上不崩溃，降级启动 + 后台持续重试，数据库恢复后自动就绪
     logger.info("初始化数据库...")
-    init_db()
-    logger.info("数据库初始化完成")
+    if not init_db():
+        logger.warning("数据库暂不可用：应用以降级模式启动，后台持续重试中...")
+        start_db_retry_loop()
+    else:
+        logger.info("数据库初始化完成")
 
     yield
 

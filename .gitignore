@@ -58,6 +58,9 @@ coverage/
 backend/data/
 backend/logs/
 
+# TLS 证书（含私钥，绝不入库；在 NAS 上生成或本机生成后 SMB 上传）
+certs/
+
 # 临时文件
 *.tmp
 *.temp

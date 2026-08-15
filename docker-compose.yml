@@ -1,10 +1,4 @@
-# AI Kitchen Assistant 群晖 NAS 部署配置
-#
-# 设计原则（按你的要求）：
-#   - 只用通用基础镜像（python / nginx），不构建自定义镜像
-#   - 代码通过 bind mount 挂载进容器，改代码无需重新构建镜像
-#   - 依赖在容器内手动安装，镜像保持最小
-#
+
 # 使用方式见 deploy/setup.md
 
 services:
@@ -21,15 +15,13 @@ services:
       # 入口脚本：requirements 变更时自动 pip install --user
       - ./backend-entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
-    # 仅启动命令；requirements.txt 有更新时重启容器即自动重装
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
+    # 仅启动命令；用 python -m uvicorn，不依赖 PATH（依赖在 /opt/pyuser 用户目录）
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
     environment:
       # 让 Python 日志实时输出，避免 docker logs 看不到
       - PYTHONUNBUFFERED=1
       # Python 用户依赖装到 NAS 挂载目录（/opt/pyuser = backend/data/python）
       - PYTHONUSERBASE=/opt/pyuser
-      # 让容器能找到 /opt/pyuser/bin 里的 uvicorn；$$PATH 转义，避免 compose 展开
-      - PATH=/opt/pyuser/bin:$$PATH
     ports:
       - "8001:8001"
     networks:
@@ -44,9 +36,12 @@ services:
       - ./frontend/dist:/usr/share/nginx/html:ro
       # nginx 配置：静态托管 + /api 反向代理到后端
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # HTTPS 证书/私钥（自签或导入的正式证书；此目录已在 .gitignore，用 SMB/SSH 上传到 NAS）
+      - /usr/syno/etc/certificate/_archive/Qi0mND:/etc/nginx/certs:ro
     ports:
-      # 宿主端口:容器端口 —— 右边必须等于 nginx.conf 里的 listen（当前 8005）
+      # 宿主端口:容器端口 —— 右边必须等于 nginx.conf 里的 listen（HTTP 8005 / HTTPS 8006）
       - "8005:8005"
+      - "8006:8006"
     networks:
       - kitchen
     depends_on:

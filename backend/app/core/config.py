@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     # 是否打印 SQLAlchemy 执行的 SQL（调试 SQL 时开启）
     SQL_ECHO: bool = False
+    # 数据库连接重试（容器启动时数据库可能尚未就绪，避免直接崩溃循环）
+    DB_RETRY_ATTEMPTS: int = 3         # 启动阶段重试次数
+    DB_RETRY_INTERVAL: float = 3.0     # 启动阶段每次重试间隔（秒）
+    DB_BG_RETRY_INTERVAL: float = 20.0 # 降级模式下后台重试间隔（秒）
 
     # LLM 配置
     LLM_PROVIDER: str = "ollama"

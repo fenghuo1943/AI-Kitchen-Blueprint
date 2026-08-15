@@ -286,7 +286,9 @@ def seed_data(db: Session):
 
 if __name__ == "__main__":
     print("开始初始化数据库...")
-    init_db()
+    if not init_db():
+        print("数据库不可用，初始化失败，请检查数据库连接")
+        raise SystemExit(1)
     print("数据库表创建完成，开始插入种子数据...")
     db = get_session_local()()
     try:

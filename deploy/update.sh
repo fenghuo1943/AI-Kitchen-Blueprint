@@ -23,11 +23,18 @@ else
     echo ">> 未检测到 git 仓库，跳过拉取（请确认代码已上传到当前目录）"
 fi
 
-# 2. 确保容器按最新 compose 配置在运行
+# 2. HTTPS 证书检查：certs/ 被 .gitignore，git pull 不会带来证书；
+#    证书不存在时 nginx（listen 8006 ssl）会启动失败，提前提醒
+if [ ! -f certs/fullchain.pem ] || [ ! -f certs/privkey.pem ]; then
+    echo "  ⚠️ 未检测到 certs/ 证书（需 fullchain.pem + privkey.pem）"
+    echo "     HTTPS(8006) 将不可用；若 frontend 启动失败，请先按 deploy/setup.md「四、HTTPS 访问」生成证书"
+fi
+
+# 3. 确保容器按最新 compose 配置在运行
 echo ">> 启动/更新容器..."
 $COMPOSE up -d
 
-# 3. 重启后端，让挂载的新代码生效
+# 4. 重启后端，让挂载的新代码生效
 echo ">> 重启后端容器..."
 $COMPOSE restart backend
 

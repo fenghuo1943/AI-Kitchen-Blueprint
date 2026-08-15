@@ -13,6 +13,10 @@
 #       所有文件操作统一用 Python（镜像必有），其余只用 bash 内建命令。
 set -e
 
+# 显式设全 PATH（不依赖 compose/Docker 的 PATH 展开，避免 command not found）：
+# /opt/pyuser/bin 为用户依赖目录，其余为 slim 镜像默认路径。
+export PATH="/opt/pyuser/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 REQ=/app/requirements.txt
 STAMP=/app/data/.requirements.sha256
 
