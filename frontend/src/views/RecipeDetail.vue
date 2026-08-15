@@ -206,18 +206,23 @@ onMounted(() => {
 
 <style scoped>
 .recipe-detail {
-  padding: 20px;
   max-width: 800px;
   margin: 0 auto;
-  padding-bottom: 100px;
 }
 
 .header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  padding: 14px 20px;
   margin-bottom: 20px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .header-left {
@@ -321,7 +326,7 @@ onMounted(() => {
 }
 
 .recipe-content {
-  margin-top: 4px;
+  padding: 0 20px 100px;
 }
 
 .summary {
@@ -602,14 +607,18 @@ onMounted(() => {
 /* 移动端响应式样式 */
 @media (max-width: 767px) {
   .recipe-detail {
-    padding: 16px;
-    padding-bottom: 104px;
+    padding: 0;
   }
 
   .header {
     flex-direction: row;
     gap: 8px;
     align-items: center;
+    padding: 12px 16px;
+  }
+
+  .recipe-content {
+    padding: 0 16px 104px;
   }
 
   .actions {
@@ -693,7 +702,7 @@ onMounted(() => {
 /* 平板端响应式样式 */
 @media (min-width: 768px) and (max-width: 1023px) {
   .recipe-detail {
-    padding: 16px;
+    padding: 0;
   }
 
   .meta {

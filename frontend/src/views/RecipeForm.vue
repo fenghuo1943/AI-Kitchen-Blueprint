@@ -8,11 +8,17 @@
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </button>
-        <h1>{{ isEdit ? '✏️ 编辑菜谱' : '🍳 新建菜谱' }}</h1>
+        <h1>{{ isEdit ? '编辑菜谱' : '新建菜谱' }}</h1>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn btn-secondary" @click="goBack">取消</button>
+        <button type="submit" form="recipe-form" class="btn btn-primary" :disabled="!form.title || saving">
+          {{ saving ? '保存中...' : (isEdit ? '保存修改' : '创建菜谱') }}
+        </button>
       </div>
     </div>
 
-    <form @submit.prevent="save">
+    <form @submit.prevent="save" id="recipe-form">
       <!-- 基础信息 -->
       <div class="card">
         <h2>基本信息</h2>
@@ -115,12 +121,6 @@
         </div>
       </div>
 
-      <div class="actions">
-        <button type="button" class="btn btn-secondary" @click="goBack">取消</button>
-        <button type="submit" class="btn btn-primary" :disabled="!form.title || saving">
-          {{ saving ? '保存中...' : (isEdit ? '保存修改' : '创建菜谱') }}
-        </button>
-      </div>
     </form>
 
     <!-- 食材选择器 -->
@@ -341,9 +341,26 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-.recipe-form { padding: 20px; max-width: 800px; margin: 0 auto; }
-.header-left { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.header-left h1 { margin: 0; }
+.recipe-form { max-width: 800px; margin: 0 auto; }
+.header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.header-left h1 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.header-actions .btn { padding: 8px 14px; min-height: 38px; font-size: 13px; }
+form { padding: 0 20px; }
 /* 返回按钮：向左箭头，蓝色轮廓，透明背景，圆角矩形外形 */
 .btn-back {
   width: 36px;
@@ -391,7 +408,6 @@ onMounted(loadData);
 .step-row textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-bottom: 8px; }
 .step-row input { width: 140px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
 
-.actions { display: flex; justify-content: flex-end; gap: 10px; }
 .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-primary { background: #4a90d9; color: white; }
 .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
@@ -410,14 +426,14 @@ onMounted(loadData);
 .modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
 
 @media (max-width: 767px) {
-  .recipe-form { padding: 16px; }
+  .recipe-form { padding: 0; }
+  .header { padding: 12px 16px; }
+  form { padding: 0 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .ing-row { flex-wrap: wrap; }
   .ing-quantity { width: 100%; }
   .ing-unit { width: 100%; }
   .modal-overlay { padding: 0; align-items: flex-end; }
   .modal { border-radius: 12px 12px 0 0; max-height: 90vh; }
-  .actions { flex-direction: column; }
-  .actions .btn { width: 100%; }
 }
 </style>

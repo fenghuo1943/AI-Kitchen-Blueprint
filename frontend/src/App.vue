@@ -1,6 +1,6 @@
 <template>
-  <div class="app">
-    <nav class="navbar">
+  <div class="app" ref="appRef">
+    <nav class="navbar" ref="navbarRef">
       <router-link to="/" class="nav-brand">🍳 AI 厨房助手</router-link>
 
       <!-- 移动端汉堡菜单按钮 -->
@@ -76,10 +76,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useResponsive } from './composables/useResponsive';
 
 const { isMobile } = useResponsive();
+
+const appRef = ref<HTMLElement | null>(null);
+const navbarRef = ref<HTMLElement | null>(null);
+let navbarObserver: ResizeObserver | null = null;
+
+// 将导航栏高度同步为 --navbar-height 变量，供各页面 sticky 标题栏吸附在导航栏正下方
+function syncNavbarHeight() {
+  if (!appRef.value || !navbarRef.value) return;
+  appRef.value.style.setProperty('--navbar-height', `${navbarRef.value.offsetHeight}px`);
+}
+
+onMounted(() => {
+  syncNavbarHeight();
+  if (navbarRef.value && typeof ResizeObserver !== 'undefined') {
+    navbarObserver = new ResizeObserver(syncNavbarHeight);
+    navbarObserver.observe(navbarRef.value);
+  } else {
+    window.addEventListener('resize', syncNavbarHeight);
+  }
+});
+
+onUnmounted(() => {
+  navbarObserver?.disconnect();
+  navbarObserver = null;
+  window.removeEventListener('resize', syncNavbarHeight);
+});
 
 const isMobileMenuOpen = ref(false);
 

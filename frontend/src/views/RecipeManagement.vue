@@ -184,14 +184,22 @@ onActivated(() => {
 
 <style scoped>
 .recipe-management {
-  padding: 20px;
+  padding: 0 20px 20px;
 }
 
 .header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .header h1 {
@@ -423,13 +431,14 @@ onActivated(() => {
 /* 移动端响应式样式 */
 @media (max-width: 767px) {
   .recipe-management {
-    padding: 16px;
+    padding: 0 16px 16px;
   }
 
   .header {
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
+    padding: 14px 0;
   }
 
   .header h1 {
