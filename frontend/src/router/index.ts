@@ -117,6 +117,12 @@ const router = createRouter({
       name: 'me',
       component: () => import('../views/Me.vue'),
       meta: { title: '我的' }
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/Settings.vue'),
+      meta: { title: '设置' }
     }
   ]
 });

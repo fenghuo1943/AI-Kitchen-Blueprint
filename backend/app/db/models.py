@@ -512,3 +512,21 @@ class MealPlan(Base, TimestampMixin):
         UniqueConstraint("household_id", "recipe_id", "target_date", name="uq_meal_plan"),
         Index("idx_meal_plan_household_date", "household_id", "target_date"),
     )
+
+
+class UserSetting(Base, TimestampMixin):
+    """用户/家庭设置（key-value 存储，按 household 隔离）"""
+    __tablename__ = "user_settings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    household_id = Column(String(36), ForeignKey("households.id", ondelete="CASCADE"), nullable=False)
+    key = Column(String(100), nullable=False)
+    value = Column(String(500), nullable=True)
+
+    # 关系
+    household = relationship("Household")
+
+    __table_args__ = (
+        UniqueConstraint("household_id", "key", name="uq_user_setting_household_key"),
+        Index("idx_user_settings_household", "household_id"),
+    )

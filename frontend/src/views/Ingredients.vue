@@ -26,7 +26,15 @@
       </select>
     </div>
 
-    <div class="ingredient-list" v-if="ingredients.length > 0">
+    <div v-if="loading && !ingredients.length" class="empty-state">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>加载中...</p>
+    </div>
+    <div v-else-if="loadError && !ingredients.length" class="empty-state">
+      <p>加载失败</p>
+      <button class="btn btn-primary" @click="loadIngredients">点击重试</button>
+    </div>
+    <div class="ingredient-list" v-else-if="ingredients.length > 0">
       <div v-for="ing in ingredients" :key="ing.id" class="ingredient-card">
         <div class="card-main" @click="editIngredient(ing)">
           <div class="ingredient-header">
@@ -64,11 +72,13 @@
       <button @click="showCreateModal = true" class="btn btn-primary">添加第一个食材</button>
     </div>
 
-    <div class="pagination" v-if="total > pageSize">
-      <button @click="prevPage" :disabled="page === 1">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button @click="nextPage" :disabled="page === totalPages">下一页</button>
-    </div>
+    <LoadMoreFooter
+      :show="total > pageSize"
+      :loading="loadingMore"
+      :error="loadError"
+      :finished="!hasMore && total > pageSize"
+      @retry="loadMore"
+    />
 
     <!-- 创建/编辑食材弹窗 -->
     <div v-if="showCreateModal" class="modal-overlay" @click.self="closeCreateModal">
@@ -129,20 +139,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { ingredientApi, categoryApi } from '../services/api';
 import { toast } from '../composables/useToast';
+import { usePageSize } from '../composables/usePageSize';
+import { useInfiniteList } from '../composables/useInfiniteList';
+import LoadMoreFooter from '../components/LoadMoreFooter.vue';
 import type { Ingredient, IngredientAlias, Category } from '../types';
 
 const { goBack } = useGoBack('/me');
 
-const ingredients = ref<Ingredient[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
 const searchQuery = ref('');
 const categoryFilter = ref('');
+
+const { pageSize, ready: pageSizeReady } = usePageSize();
+const {
+  items: ingredients,
+  total,
+  loading,
+  loadingMore,
+  loadError,
+  hasMore,
+  reset: loadIngredients,
+  loadMore
+} = useInfiniteList<Ingredient>({
+  fetcher: (page, pageSize) => ingredientApi.list({
+    query: searchQuery.value || undefined,
+    category_id: categoryFilter.value || undefined,
+    page,
+    page_size: pageSize
+  }),
+  getPageSize: () => pageSize.value
+});
 const showCreateModal = ref(false);
 const showAliasModal = ref(false);
 const editingIngredient = ref<Ingredient | null>(null);
@@ -159,31 +188,13 @@ const ingredientForm = ref({
   category_id: ''
 });
 
-const totalPages = computed(() => Math.ceil(total.value / pageSize));
-
 let searchTimeout: ReturnType<typeof setTimeout>;
 
 function debouncedSearch() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    page.value = 1;
     loadIngredients();
   }, 300);
-}
-
-async function loadIngredients() {
-  try {
-    const response = await ingredientApi.list({
-      query: searchQuery.value || undefined,
-      category_id: categoryFilter.value || undefined,
-      page: page.value,
-      page_size: pageSize
-    });
-    ingredients.value = response.data;
-    total.value = response.total;
-  } catch (error) {
-    console.error('Failed to load ingredients:', error);
-  }
 }
 
 async function loadCategories() {
@@ -293,36 +304,30 @@ function closeCreateModal() {
   allergenInput.value = '';
 }
 
-function prevPage() {
-  if (page.value > 1) {
-    page.value--;
-    loadIngredients();
-  }
-}
-
-function nextPage() {
-  if (page.value < totalPages.value) {
-    page.value++;
-    loadIngredients();
-  }
-}
-
 onMounted(() => {
-  loadIngredients();
+  pageSizeReady.then(loadIngredients);
   loadCategories();
 });
 </script>
 
 <style scoped>
 .ingredients {
-  padding: 20px;
+  padding: 0 20px 20px;
 }
 
 .header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  padding: 16px 0;
   margin-bottom: 20px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .header-left {
@@ -487,13 +492,17 @@ onMounted(() => {
   color: #888;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 20px;
+.empty-state p {
+  margin: 0 0 16px;
 }
+
+.spinner {
+  display: inline-block;
+  width: 32px; height: 32px;
+  border: 3px solid #e0e0e0; border-top-color: #4a90d9;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .btn {
   padding: 10px 20px;
@@ -603,13 +612,14 @@ onMounted(() => {
 /* 移动端响应式样式 */
 @media (max-width: 767px) {
   .ingredients {
-    padding: 16px;
+    padding: 0 16px 16px;
   }
 
   .header {
     flex-direction: row;
     gap: 10px;
     align-items: center;
+    padding: 14px 0;
   }
 
   .header h1 {
@@ -678,15 +688,6 @@ onMounted(() => {
     padding: 4px 8px;
     font-size: 11px;
     min-height: 28px;
-  }
-
-  .pagination {
-    gap: 12px;
-  }
-
-  .pagination button {
-    min-height: 44px;
-    padding: 8px 16px;
   }
 
   /* 移动端模态框 */

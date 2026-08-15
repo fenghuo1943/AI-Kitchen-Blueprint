@@ -9,6 +9,11 @@
     </div>
 
     <div class="menu-list">
+      <router-link to="/settings" class="menu-item">
+        <span class="menu-icon">⚙️</span>
+        <span class="menu-label">设置</span>
+        <span class="menu-arrow">›</span>
+      </router-link>
       <router-link to="/favorites" class="menu-item">
         <span class="menu-icon">♥</span>
         <span class="menu-label">我的收藏</span>

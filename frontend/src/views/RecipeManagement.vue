@@ -40,6 +40,10 @@
       <span class="spinner" aria-hidden="true"></span>
       <p>加载中...</p>
     </div>
+    <div v-else-if="loadError && !recipes.length" class="empty-state">
+      <p>加载失败</p>
+      <button class="btn btn-primary" @click="loadRecipes">点击重试</button>
+    </div>
 
     <div v-else-if="recipes.length > 0" class="recipe-list">
       <div v-for="recipe in recipes" :key="recipe.id" class="recipe-row" @click="viewRecipe(recipe.id)">
@@ -74,21 +78,26 @@
       <button @click="goCreate" class="btn btn-primary">新建菜谱</button>
     </div>
 
-    <div class="pagination" v-if="total > pageSize">
-      <button @click="prevPage" :disabled="page === 1">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button @click="nextPage" :disabled="page >= totalPages">下一页</button>
-    </div>
+    <LoadMoreFooter
+      :show="total > pageSize"
+      :loading="loadingMore"
+      :error="loadError"
+      :finished="!hasMore && total > pageSize"
+      @retry="loadMore"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated } from 'vue';
+import { ref, onMounted, onActivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGoBack } from '../composables/useGoBack';
 import { recipeApi, categoryApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
+import { usePageSize } from '../composables/usePageSize';
+import { useInfiniteList } from '../composables/useInfiniteList';
+import LoadMoreFooter from '../components/LoadMoreFooter.vue';
 import type { Recipe, Category } from '../types';
 
 defineOptions({ name: 'RecipeManagement' });
@@ -97,20 +106,34 @@ const router = useRouter();
 const appStore = useAppStore();
 const { goBack } = useGoBack('/me');
 
-const recipes = ref<Recipe[]>([]);
 const categories = ref<Category[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
 const searchQuery = ref('');
 const categoryFilter = ref('');
 const statusFilter = ref('');
 const sortFilter = ref('date'); // 默认按添加时间倒序
-const loading = ref(false);
 
-let loadSeq = 0; // 请求序号，用于忽略过期的慢响应
-
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+const { pageSize, ready: pageSizeReady } = usePageSize();
+const {
+  items: recipes,
+  total,
+  loading,
+  loadingMore,
+  loadError,
+  hasMore,
+  reset: loadRecipes,
+  loadMore
+} = useInfiniteList<Recipe>({
+  fetcher: (page, pageSize) =>
+    recipeApi.list({
+      query: searchQuery.value || undefined,
+      status: statusFilter.value || undefined,
+      category_id: categoryFilter.value || undefined,
+      sort: sortFilter.value,
+      page,
+      page_size: pageSize
+    }),
+  getPageSize: () => pageSize.value
+});
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -130,31 +153,8 @@ let searchTimeout: ReturnType<typeof setTimeout>;
 function debouncedSearch() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    page.value = 1;
     loadRecipes();
   }, 300);
-}
-
-async function loadRecipes() {
-  const seq = ++loadSeq;
-  loading.value = true;
-  try {
-    const response = await recipeApi.list({
-      query: searchQuery.value || undefined,
-      status: statusFilter.value || undefined,
-      category_id: categoryFilter.value || undefined,
-      sort: sortFilter.value,
-      page: page.value,
-      page_size: pageSize
-    });
-    if (seq !== loadSeq) return; // 忽略过期响应
-    recipes.value = response.data;
-    total.value = response.total;
-  } catch (error) {
-    if (seq === loadSeq) console.error('Failed to load recipes:', error);
-  } finally {
-    if (seq === loadSeq) loading.value = false;
-  }
 }
 
 function viewRecipe(id: string) {
@@ -181,32 +181,21 @@ async function deleteRecipe(id: string, title: string) {
   }
 }
 
-function prevPage() {
-  if (page.value > 1) {
-    page.value--;
-    loadRecipes();
-  }
-}
-
-function nextPage() {
-  if (page.value < totalPages.value) {
-    page.value++;
-    loadRecipes();
-  }
-}
-
-onMounted(async () => {
-  loadRecipes();
-  try {
-    const res = await categoryApi.list('recipe');
-    categories.value = res.data;
-  } catch (error) {
-    console.error('Failed to load categories:', error);
-  }
+onMounted(() => {
+  pageSizeReady.then(loadRecipes);
+  categoryApi
+    .list('recipe')
+    .then((res) => {
+      categories.value = res.data;
+    })
+    .catch((error) => {
+      console.error('Failed to load categories:', error);
+    });
 });
 
 // 从编辑/详情页返回时刷新（若菜谱有变化）
-onActivated(() => {
+onActivated(async () => {
+  await pageSizeReady;
   loadRecipes();
 });
 </script>
@@ -421,28 +410,6 @@ onActivated(() => {
   margin-bottom: 20px;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.pagination button {
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: white;
-  cursor: pointer;
-}
-
-.pagination button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .btn {
   padding: 10px 16px;
   border: none;
@@ -607,13 +574,5 @@ onActivated(() => {
     flex: none;
   }
 
-  .pagination {
-    gap: 12px;
-  }
-
-  .pagination button {
-    min-height: 44px;
-    padding: 8px 16px;
-  }
 }
 </style>

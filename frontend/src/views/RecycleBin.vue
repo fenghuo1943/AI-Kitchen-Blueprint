@@ -5,7 +5,15 @@
       <button @click="$router.back()" class="btn btn-secondary">← 返回</button>
     </div>
 
-    <div v-if="items.length" class="list">
+    <div v-if="loading && !items.length" class="empty-state">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>加载中...</p>
+    </div>
+    <div v-else-if="loadError && !items.length" class="empty-state">
+      <p>加载失败</p>
+      <button class="btn btn-primary" @click="load">点击重试</button>
+    </div>
+    <div v-else-if="items.length" class="list">
       <div v-for="recipe in items" :key="recipe.id" class="list-row">
         <div class="row-main">
           <span class="row-title">{{ recipe.title }}</span>
@@ -19,42 +27,42 @@
     </div>
     <div v-else class="empty-state">🗑 回收站是空的</div>
 
-    <div class="pagination" v-if="total > pageSize">
-      <button @click="page--; load()" :disabled="page === 1">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button @click="page++; load()" :disabled="page >= totalPages">下一页</button>
-    </div>
+    <LoadMoreFooter
+      :show="total > pageSize"
+      :loading="loadingMore"
+      :error="loadError"
+      :finished="!hasMore && total > pageSize"
+      @retry="loadMore"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { recipeApi } from '../services/api';
 import { toast } from '../composables/useToast';
+import { usePageSize } from '../composables/usePageSize';
+import { useInfiniteList } from '../composables/useInfiniteList';
+import LoadMoreFooter from '../components/LoadMoreFooter.vue';
 import type { Recipe } from '../types';
 
-const items = ref<Recipe[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+const { pageSize, ready: pageSizeReady } = usePageSize();
+const {
+  items,
+  total,
+  loading,
+  loadingMore,
+  loadError,
+  hasMore,
+  reset: load,
+  loadMore
+} = useInfiniteList<Recipe>({
+  fetcher: (page, pageSize) => recipeApi.list({ deleted: true, page, page_size: pageSize }),
+  getPageSize: () => pageSize.value
+});
 
 function formatTime(t: string) {
   return new Date(t).toLocaleString();
-}
-
-async function load() {
-  try {
-    const res = await recipeApi.list({
-      deleted: true,
-      page: page.value,
-      page_size: pageSize
-    });
-    items.value = res.data;
-    total.value = res.total;
-  } catch (e) {
-    console.error('load recycle bin failed', e);
-  }
 }
 
 async function restore(id: string) {
@@ -78,7 +86,9 @@ async function hardDelete(id: string) {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  pageSizeReady.then(load);
+});
 </script>
 
 <style scoped>
@@ -97,12 +107,20 @@ onMounted(load);
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-secondary { background: #f0f0f0; color: #333; }
+.btn-primary { background: #4a90d9; color: white; }
 .btn-small { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
 .btn-confirm { background: #4a90d9; color: white; }
 .btn-danger { background: #f44336; color: white; }
+
 .empty-state { text-align: center; padding: 60px 20px; color: #888; }
-.pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; }
-.pagination button { min-height: 44px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; }
+.empty-state p { margin: 0 0 16px; }
+.spinner {
+  display: inline-block;
+  width: 32px; height: 32px;
+  border: 3px solid #e0e0e0; border-top-color: #4a90d9;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 767px) {
   .recycle-bin { padding: 16px; }

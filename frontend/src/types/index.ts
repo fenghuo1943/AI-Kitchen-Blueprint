@@ -393,3 +393,9 @@ export interface PaginatedResponse<T> {
   page: number;
   page_size: number;
 }
+
+// 用户/家庭设置
+export interface UserSettings {
+  page_size_desktop: number;
+  page_size_mobile: number;
+}

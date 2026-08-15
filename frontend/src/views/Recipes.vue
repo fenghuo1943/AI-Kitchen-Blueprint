@@ -62,6 +62,10 @@
       <span class="spinner" aria-hidden="true"></span>
       <p>加载中...</p>
     </div>
+    <div v-else-if="loadError && !recipes.length" class="empty-state">
+      <p>加载失败</p>
+      <button class="btn btn-primary" @click="loadRecipes">点击重试</button>
+    </div>
     <template v-else-if="recipes.length > 0">
       <div class="recipe-grid">
         <RecipeCard
@@ -78,12 +82,13 @@
       <button @click="goCreate" class="btn btn-primary">添加第一个菜谱</button>
     </div>
 
-    <!-- 分页 -->
-    <div class="pagination" v-if="total > pageSize">
-      <button @click="prevPage" :disabled="page === 1">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button @click="nextPage" :disabled="page === totalPages">下一页</button>
-    </div>
+    <LoadMoreFooter
+      :show="total > pageSize"
+      :loading="loadingMore"
+      :error="loadError"
+      :finished="!hasMore && total > pageSize"
+      @retry="loadMore"
+    />
 
     <!-- 食材筛选弹窗 -->
     <div v-if="showIngModal" class="modal-overlay" @click.self="showIngModal = false">
@@ -123,6 +128,9 @@ import AddToMenuModal from '../components/AddToMenuModal.vue';
 import { recipeApi, categoryApi, ingredientApi, favoriteApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
+import { usePageSize } from '../composables/usePageSize';
+import { useInfiniteList } from '../composables/useInfiniteList';
+import LoadMoreFooter from '../components/LoadMoreFooter.vue';
 import type { Recipe, Category, Ingredient } from '../types';
 
 defineOptions({ name: 'Recipes' }); // 供 KeepAlive include 精确匹配
@@ -134,21 +142,38 @@ const appStore = useAppStore();
 // 已展示列表对应的数据版本：返回页面时若 recipeVersion 未变则跳过刷新
 let loadedVersion = -1;
 
-const recipes = ref<Recipe[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
-
-// 加载状态：请求进行中且列表为空时显示「加载中」，而非「暂无菜谱」
-const loading = ref(false);
-let loadSeq = 0; // 请求序号，用于忽略过期的慢响应
-
 const searchInput = ref('');
 const status = ref('');
 const sort = ref('score');
 const match = ref<'exact' | 'any'>('exact');
 const categoryId = ref('');
 const selectedIngredients = ref<{ id: string; name: string }[]>([]);
+
+const { pageSize, ready: pageSizeReady } = usePageSize();
+const {
+  items: recipes,
+  total,
+  loading,
+  loadingMore,
+  loadError,
+  hasMore,
+  reset: loadRecipes,
+  loadMore
+} = useInfiniteList<Recipe>({
+  fetcher: (page, pageSize) =>
+    recipeApi.list({
+      query: searchInput.value || undefined,
+      status: status.value || undefined,
+      sort: sort.value,
+      category_id: categoryId.value || undefined,
+      ingredients: selectedIngredients.value.map(i => i.id).join(',') || undefined,
+      match: selectedIngredients.value.length ? match.value : undefined,
+      page,
+      page_size: pageSize
+    }),
+  getPageSize: () => pageSize.value,
+  dedupeKey: (r) => r.id
+});
 
 const recipeCategories = ref<Category[]>([]);
 const ingCategories = ref<Category[]>([]);
@@ -161,7 +186,6 @@ const ingCategoryFilter = ref('');
 const menuModal = ref();
 const activeMenuRecipeId = ref('');
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 const filteredIngredients = computed(() => {
   return allIngredients.value.filter(ing => {
     if (ingCategoryFilter.value && ing.category_id !== ingCategoryFilter.value) return false;
@@ -174,7 +198,6 @@ let searchTimeout: ReturnType<typeof setTimeout>;
 function debouncedSearch() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    page.value = 1;
     loadRecipes();
   }, 400);
 }
@@ -220,32 +243,7 @@ function clearFilters() {
   match.value = 'exact';
   categoryId.value = '';
   selectedIngredients.value = [];
-  page.value = 1;
   loadRecipes();
-}
-
-async function loadRecipes() {
-  const seq = ++loadSeq;
-  loading.value = true;
-  try {
-    const response = await recipeApi.list({
-      query: searchInput.value || undefined,
-      status: status.value || undefined,
-      sort: sort.value,
-      category_id: categoryId.value || undefined,
-      ingredients: selectedIngredients.value.map(i => i.id).join(',') || undefined,
-      match: selectedIngredients.value.length ? match.value : undefined,
-      page: page.value,
-      page_size: pageSize
-    });
-    if (seq !== loadSeq) return; // 忽略过期响应
-    recipes.value = response.data;
-    total.value = response.total;
-  } catch (error) {
-    if (seq === loadSeq) console.error('Failed to load recipes:', error);
-  } finally {
-    if (seq === loadSeq) loading.value = false;
-  }
 }
 
 async function toggleFavorite(recipe: Recipe | import('../types').DiscoverRecipe) {
@@ -277,13 +275,6 @@ function goCreate() {
   router.push('/recipes/new');
 }
 
-function prevPage() {
-  if (page.value > 1) { page.value--; loadRecipes(); }
-}
-function nextPage() {
-  if (page.value < totalPages.value) { page.value++; loadRecipes(); }
-}
-
 onMounted(async () => {
   // 从首页搜索跳转时带上关键词
   const q = route.query.q as string | undefined;
@@ -292,6 +283,7 @@ onMounted(async () => {
   }
   loadedVersion = appStore.recipeVersion;
   console.log(`[recipeVersion] 菜谱库首次挂载，记录 loadedVersion=${loadedVersion}，加载列表`);
+  await pageSizeReady;
   loadRecipes();
   try {
     const [rc, ic, ings] = await Promise.all([
@@ -309,10 +301,11 @@ onMounted(async () => {
 
 // 组件被 KeepAlive 缓存，从详情页返回时重新激活：
 // 数据未变（recipeVersion 相同）则不刷新，保留筛选与列表；菜谱有增删改才重新拉取
-onActivated(() => {
+onActivated(async () => {
   if (loadedVersion !== appStore.recipeVersion) {
     console.log(`[recipeVersion] 菜谱库重新激活：loadedVersion=${loadedVersion} ≠ recipeVersion=${appStore.recipeVersion}，重新拉取`);
     loadedVersion = appStore.recipeVersion;
+    await pageSizeReady;
     loadRecipes();
   } else {
     console.log(`[recipeVersion] 菜谱库重新激活：版本未变（${loadedVersion}），跳过刷新`);
@@ -320,10 +313,10 @@ onActivated(() => {
 });
 
 // 缓存期间从首页搜索跳转（/recipes?q=xxx）时更新关键词并刷新
-watch(() => route.query.q, (q) => {
+watch(() => route.query.q, async (q) => {
   searchInput.value = (q as string) || '';
-  page.value = 1;
   console.log(`[recipeVersion] 路由参数 q 变化触发刷新，keyword="${searchInput.value}"`);
+  await pageSizeReady;
   loadRecipes();
 });
 </script>
@@ -393,10 +386,6 @@ watch(() => route.query.q, (q) => {
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.pagination { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 20px; }
-.pagination button { min-height: 44px; padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; }
-.pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-primary { background: #4a90d9; color: white; }

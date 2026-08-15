@@ -24,7 +24,15 @@
       </div>
     </div>
 
-    <div class="inventory-list" v-if="inventoryItems.length > 0">
+    <div v-if="loading && !inventoryItems.length" class="empty-state">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>加载中...</p>
+    </div>
+    <div v-else-if="loadError && !inventoryItems.length" class="empty-state">
+      <p>加载失败</p>
+      <button class="btn btn-primary" @click="loadInventory">点击重试</button>
+    </div>
+    <div class="inventory-list" v-else-if="inventoryItems.length > 0">
       <div v-for="item in inventoryItems" :key="item.id" class="inventory-card" :class="{ expired: item.is_expired }">
         <div class="item-header">
           <h3>{{ item.ingredient_name }}</h3>
@@ -47,11 +55,13 @@
       <button @click="showAddModal = true" class="btn btn-primary">添加第一个库存</button>
     </div>
 
-    <div class="pagination" v-if="total > pageSize">
-      <button @click="prevPage" :disabled="page === 1">上一页</button>
-      <span>{{ page }} / {{ totalPages }}</span>
-      <button @click="nextPage" :disabled="page === totalPages">下一页</button>
-    </div>
+    <LoadMoreFooter
+      :show="total > pageSize"
+      :loading="loadingMore"
+      :error="loadError"
+      :finished="!hasMore && total > pageSize"
+      @retry="loadMore"
+    />
 
     <!-- 添加库存弹窗 -->
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
@@ -97,19 +107,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { inventoryApi, ingredientApi } from '../services/api';
+import { usePageSize } from '../composables/usePageSize';
+import { useInfiniteList } from '../composables/useInfiniteList';
+import LoadMoreFooter from '../components/LoadMoreFooter.vue';
 import type { InventoryItem, Ingredient } from '../types';
 
 const { goBack } = useGoBack('/me');
 
-const inventoryItems = ref<InventoryItem[]>([]);
 const expiringItems = ref<InventoryItem[]>([]);
 const availableIngredients = ref<Ingredient[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
+const { pageSize, ready: pageSizeReady } = usePageSize();
+const {
+  items: inventoryItems,
+  total,
+  loading,
+  loadingMore,
+  loadError,
+  hasMore,
+  reset: loadInventory,
+  loadMore
+} = useInfiniteList<InventoryItem>({
+  fetcher: (page, pageSize) => inventoryApi.listItems({ page, page_size: pageSize }),
+  getPageSize: () => pageSize.value
+});
 
 const showAddModal = ref(false);
 const editingItem = ref<InventoryItem | null>(null);
@@ -122,24 +145,9 @@ const itemForm = ref({
   note: ''
 });
 
-const totalPages = computed(() => Math.ceil(total.value / pageSize));
-
 function formatDate(dateStr?: string) {
   if (!dateStr) return '-';
   return new Date(dateStr).toLocaleDateString('zh-CN');
-}
-
-async function loadInventory() {
-  try {
-    const response = await inventoryApi.listItems({
-      page: page.value,
-      page_size: pageSize
-    });
-    inventoryItems.value = response.data;
-    total.value = response.total;
-  } catch (error) {
-    console.error('Failed to load inventory:', error);
-  }
 }
 
 async function loadExpiringItems() {
@@ -219,22 +227,8 @@ function closeAddModal() {
   };
 }
 
-function prevPage() {
-  if (page.value > 1) {
-    page.value--;
-    loadInventory();
-  }
-}
-
-function nextPage() {
-  if (page.value < totalPages.value) {
-    page.value++;
-    loadInventory();
-  }
-}
-
 onMounted(() => {
-  loadInventory();
+  pageSizeReady.then(loadInventory);
   loadExpiringItems();
   loadIngredients();
 });
@@ -380,13 +374,13 @@ onMounted(() => {
   color: #888;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 20px;
+.spinner {
+  display: inline-block;
+  width: 32px; height: 32px;
+  border: 3px solid #e0e0e0; border-top-color: #4a90d9;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .btn {
   padding: 10px 20px;
@@ -569,15 +563,6 @@ onMounted(() => {
   .item-actions .btn {
     flex: 1;
     min-width: calc(50% - 4px);
-  }
-
-  .pagination {
-    gap: 12px;
-  }
-
-  .pagination button {
-    min-height: 44px;
-    padding: 8px 16px;
   }
 
   /* 移动端模态框 */

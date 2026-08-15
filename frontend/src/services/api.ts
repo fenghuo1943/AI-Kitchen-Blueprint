@@ -26,7 +26,8 @@ import type {
   AICollectConfigStatus,
   LLMModelsResponse,
   BrowserStatus,
-  BrowserFetch
+  BrowserFetch,
+  UserSettings
 } from '../types';
 
 const api = axios.create({
@@ -280,6 +281,15 @@ export const aiCollectApi = {
 
   browserFetch: (url: string) =>
     api.post<any, BrowserFetch>('/ai-collect/browser/fetch', { url }, { timeout: 120000 })
+};
+
+// 用户/家庭设置 API
+export const settingsApi = {
+  get: () =>
+    api.get<any, UserSettings>('/settings'),
+
+  update: (data: Partial<UserSettings>) =>
+    api.put<any, UserSettings>('/settings', data)
 };
 
 // 入库 API

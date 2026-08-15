@@ -181,9 +181,22 @@ onMounted(() => { load(); loadCategories(); });
 </script>
 
 <style scoped>
-.seasonings { padding: 20px; }
+.seasonings { padding: 0 20px 20px; }
 
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
 .header h1 { margin: 0; }
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .btn-back {
@@ -274,7 +287,8 @@ onMounted(() => { load(); loadCategories(); });
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 @media (max-width: 767px) {
-  .seasonings { padding: 16px; }
+  .seasonings { padding: 0 16px 16px; }
+  .header { padding: 14px 0; }
   .header h1 { text-align: center; font-size: 1.5rem; }
   .header-left { justify-content: center; position: relative; width: 100%; }
   .btn-back { position: absolute; left: 0; }
