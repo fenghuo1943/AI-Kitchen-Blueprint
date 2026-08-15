@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.core.pinyin import to_pinyin
 from app.db.models import Ingredient, IngredientAlias
+from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
@@ -51,13 +52,21 @@ class IngredientService:
         if existing:
             raise ValueError(f"食材名称 '{data.canonical_name}' 已存在")
 
+        # 未指定分类时统一落到默认分类
+        category = data.category
+        category_id = data.category_id
+        if not category_id:
+            category_id = get_default_category_id(self.repository.db, "ingredient")
+            if not category:
+                category = DEFAULT_CATEGORY_NAME
+
         # 创建食材
         ingredient = Ingredient(
             id=str(uuid.uuid4()),
             canonical_name=data.canonical_name,
             pinyin=to_pinyin(data.canonical_name),
-            category=data.category,
-            category_id=data.category_id,
+            category=category,
+            category_id=category_id,
             season_months=json.dumps(data.season_months) if data.season_months else None,
             allergens=json.dumps(data.allergens) if data.allergens else None,
             nutrition_ref=data.nutrition_ref,

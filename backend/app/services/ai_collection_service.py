@@ -24,8 +24,8 @@ from app.core.pinyin import to_pinyin
 from app.db.database import get_db_context
 from app.db.models import (
     IngestionCandidate, IngestionJob, Ingredient, Recipe,
-    RecipeIngredient, RecipeRevision, RecipeSeasoning, RecipeSource,
-    RecipeStep, RecipeTag, Seasoning, Tag,
+    RecipeCategoryLink, RecipeIngredient, RecipeRevision, RecipeSeasoning,
+    RecipeSource, RecipeStep, RecipeTag, Seasoning, Tag,
 )
 from app.llm import (
     LLMProvider, LLMUnavailableError, LLMValidationError,
@@ -38,6 +38,7 @@ from app.llm.prompts import (
     normalize_title, validate_recipe_reason,
 )
 from app.repositories.ai_collection_repository import AICollectionRepository
+from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
 from app.repositories.ingredient_repository import IngredientRepository
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.recipe_repository import RecipeRepository
@@ -616,6 +617,13 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
+        # 未指定分类的采集菜谱落到默认分类（入库规则）
+        db.add(RecipeCategoryLink(
+            id=str(uuid.uuid4()),
+            recipe_id=cand_recipe.id,
+            category_id=get_default_category_id(db, "recipe"),
+        ))
+
         # 调料兜底：静态词典未覆盖、但调料表中已维护的名字（用户手工新增的调料）→ 拆到调料
         seasoning_repo = SeasoningRepository(db)
         known_seasonings = {s.canonical_name for s in seasoning_repo.list_all()}
@@ -640,8 +648,13 @@ class AiCollectionService:
                 continue
             ingredient = ingredient_repo.get_by_name(name)
             if not ingredient:
+                # 未指定分类的食材落到默认分类（入库规则）
                 ingredient = Ingredient(
-                    id=str(uuid.uuid4()), canonical_name=name, confidence_status="candidate"
+                    id=str(uuid.uuid4()),
+                    canonical_name=name,
+                    confidence_status="candidate",
+                    category=DEFAULT_CATEGORY_NAME,
+                    category_id=get_default_category_id(db, "ingredient"),
                 )
                 db.add(ingredient)
                 db.flush()
@@ -664,8 +677,12 @@ class AiCollectionService:
                 continue
             seasoning = seasoning_repo.get_by_name(name)
             if not seasoning:
+                # 未指定分类的调料落到默认分类（入库规则）
                 seasoning = Seasoning(
-                    id=str(uuid.uuid4()), canonical_name=name, pinyin=to_pinyin(name)
+                    id=str(uuid.uuid4()),
+                    canonical_name=name,
+                    pinyin=to_pinyin(name),
+                    category_id=get_default_category_id(db, "seasoning"),
                 )
                 db.add(seasoning)
                 db.flush()

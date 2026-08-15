@@ -5,14 +5,30 @@ from sqlalchemy import func
 
 from app.db.models import RecipeCategory, IngredientCategory, SeasoningCategory
 
-# 默认分类 ID 受保护，不可删除/重命名
+# 默认分类受保护，不可删除/重命名
+# ID '1' 为种子/测试环境约定；生产库默认分类可能为 UUID，按名称 '默认' 解析。
 DEFAULT_CATEGORY_ID = "1"
+DEFAULT_CATEGORY_NAME = "默认"
 
 CATEGORY_MODELS: dict[str, Type] = {
     "recipe": RecipeCategory,
     "ingredient": IngredientCategory,
     "seasoning": SeasoningCategory,
 }
+
+
+def get_default_category_id(db: Session, type_: str) -> str:
+    """解析某类型的默认分类 ID。
+
+    优先按名称 '默认' 找到对应分类（生产库默认分类为 UUID）；
+    找不到时回落 DEFAULT_CATEGORY_ID（种子/测试库约定 id='1'）。
+    入库时未指定分类的菜谱/食材/调料统一落到该分类。
+    """
+    model = CATEGORY_MODELS.get(type_)
+    if not model:
+        raise ValueError(f"未知分类类型: {type_}")
+    cat = db.query(model).filter(model.name == DEFAULT_CATEGORY_NAME).first()
+    return cat.id if cat else DEFAULT_CATEGORY_ID
 
 
 class CategoryRepository:
@@ -69,7 +85,9 @@ class CategoryRepository:
         obj = self.get(type_, category_id)
         if not obj:
             return None
-        if category_id == DEFAULT_CATEGORY_ID and name and name != obj.name:
+        if name and name != obj.name and (
+            category_id == DEFAULT_CATEGORY_ID or obj.name == DEFAULT_CATEGORY_NAME
+        ):
             raise ValueError("默认分类不可重命名")
         if name:
             obj.name = name
@@ -90,6 +108,8 @@ class CategoryRepository:
         obj = self.get(type_, category_id)
         if not obj:
             return False
+        if obj.name == DEFAULT_CATEGORY_NAME:
+            raise ValueError("默认分类不可删除")
         self.db.delete(obj)
         self.db.commit()
         return True

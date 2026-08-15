@@ -5,7 +5,11 @@ import json
 from typing import Optional, List
 from datetime import datetime
 
-from app.db.models import IngestionJob, RecipeSource, Recipe, RecipeIngredient, RecipeStep
+from app.db.models import (
+    IngestionJob, RecipeSource, Recipe, RecipeCategoryLink,
+    RecipeIngredient, RecipeStep,
+)
+from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.ingestion import (
@@ -131,6 +135,13 @@ class IngestionService:
             )
             recipe = self.ingestion_repository.create_recipe(recipe)
 
+            # 未指定分类的菜谱落到默认分类（入库规则）
+            self.ingestion_repository.db.add(RecipeCategoryLink(
+                id=str(uuid.uuid4()),
+                recipe_id=recipe.id,
+                category_id=get_default_category_id(self.ingestion_repository.db, "recipe"),
+            ))
+
             # 处理食材
             for i, ing_data in enumerate(recipe_data.ingredients):
                 ingredient_name = ing_data.get("name", "")
@@ -141,10 +152,13 @@ class IngestionService:
                 ingredient = self.ingredient_repository.get_by_name(ingredient_name)
                 if not ingredient:
                     from app.db.models import Ingredient
+                    # 未指定分类的食材落到默认分类（入库规则）
                     ingredient = Ingredient(
                         id=str(uuid.uuid4()),
                         canonical_name=ingredient_name,
-                        confidence_status="candidate"
+                        confidence_status="candidate",
+                        category=DEFAULT_CATEGORY_NAME,
+                        category_id=get_default_category_id(self.ingredient_repository.db, "ingredient"),
                     )
                     ingredient = self.ingredient_repository.create(ingredient)
 

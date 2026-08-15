@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.pinyin import to_pinyin
 from app.db.models import Seasoning
+from app.repositories.category_repository import get_default_category_id
 from app.repositories.seasoning_repository import SeasoningRepository
 from app.schemas.seasoning import (
     SeasoningCreate, SeasoningUpdate, SeasoningResponse, SeasoningListResponse
@@ -43,11 +44,13 @@ class SeasoningService:
         name = data.canonical_name.strip()
         if not name:
             raise ValueError("调料名称不能为空")
+        # 未指定分类时统一落到默认分类
+        category_id = data.category_id or get_default_category_id(self.db, "seasoning")
         seasoning = Seasoning(
             id=str(uuid.uuid4()),
             canonical_name=name,
             pinyin=to_pinyin(name),
-            category_id=data.category_id,
+            category_id=category_id,
         )
         try:
             seasoning = self.repository.create(seasoning)

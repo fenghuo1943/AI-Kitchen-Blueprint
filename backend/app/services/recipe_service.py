@@ -5,6 +5,7 @@ from datetime import datetime
 
 from app.core.pinyin import to_pinyin
 from app.db.models import Recipe, RecipeIngredient, RecipeStep
+from app.repositories.category_repository import get_default_category_id
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.tasks.executor import enqueue_index, enqueue_delete
@@ -153,7 +154,10 @@ class RecipeService:
                 self.recipe_repository.add_tags(recipe_id, update_data["tags"])
         if "category_ids" in update_data:
             self.recipe_repository.remove_categories(recipe_id)
-            for cid in update_data["category_ids"]:
+            cids = list(update_data["category_ids"] or [])
+            if not cids:  # 清空分类时落到默认分类（与入库规则一致）
+                cids = [get_default_category_id(self.recipe_repository.db, "recipe")]
+            for cid in cids:
                 self.recipe_repository.add_category(recipe_id, cid)
         if "seasonings" in update_data:
             self.recipe_repository.remove_seasonings(recipe_id)
@@ -231,6 +235,9 @@ class RecipeService:
         if tags:
             self.recipe_repository.add_tags(recipe_id, tags)
 
+        category_ids = list(category_ids or [])
+        if not category_ids:  # 未指定分类时落到默认分类（入库规则）
+            category_ids = [get_default_category_id(self.recipe_repository.db, "recipe")]
         for cid in category_ids:
             self.recipe_repository.add_category(recipe_id, cid)
 
