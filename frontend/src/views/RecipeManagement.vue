@@ -1,8 +1,16 @@
 <template>
   <div class="recipe-management">
     <div class="header">
-      <h1>📖 菜谱管理</h1>
-      <button @click="goCreate" class="btn btn-primary">新建菜谱</button>
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <h1>📖 菜谱管理</h1>
+        <button @click="goCreate" class="btn btn-primary btn-sm">新建菜谱</button>
+      </div>
     </div>
 
     <div class="filters">
@@ -77,6 +85,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated } from 'vue';
 import { useRouter } from 'vue-router';
+import { useGoBack } from '../composables/useGoBack';
 import { recipeApi, categoryApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
@@ -86,6 +95,7 @@ defineOptions({ name: 'RecipeManagement' });
 
 const router = useRouter();
 const appStore = useAppStore();
+const { goBack } = useGoBack('/me');
 
 const recipes = ref<Recipe[]>([]);
 const categories = ref<Category[]>([]);
@@ -225,6 +235,32 @@ onActivated(() => {
   margin: 0;
   font-size: 1.5rem;
   color: #333;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.btn-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-back:hover {
+  background: rgba(7, 132, 255, 0.08);
 }
 
 .filters {
@@ -420,6 +456,17 @@ onActivated(() => {
   justify-content: center;
 }
 
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  min-height: 32px;
+  flex-shrink: 0;
+}
+
+.header .btn-sm {
+  margin-left: auto;
+}
+
 .btn-small {
   padding: 8px 14px;
   font-size: 12px;
@@ -488,8 +535,20 @@ onActivated(() => {
     text-align: center;
   }
 
-  .header .btn {
+  .header-left {
+    justify-content: center;
+    position: relative;
     width: 100%;
+  }
+
+  .btn-back {
+    position: absolute;
+    left: 0;
+  }
+
+  .header .btn-sm {
+    position: absolute;
+    right: 0;
   }
 
   .filters {

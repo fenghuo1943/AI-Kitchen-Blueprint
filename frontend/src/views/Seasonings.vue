@@ -1,7 +1,15 @@
 <template>
   <div class="seasonings">
     <div class="header">
-      <h1>🧂 调料管理</h1>
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <h1>🧂 调料管理</h1>
+      </div>
       <router-link to="/categories" class="btn btn-secondary">分类管理</router-link>
     </div>
 
@@ -33,9 +41,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useGoBack } from '../composables/useGoBack';
 import { seasoningApi, categoryApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import type { Seasoning, Category } from '../types';
+
+const { goBack } = useGoBack('/me');
 
 const seasonings = ref<Seasoning[]>([]);
 const seaCategories = ref<Category[]>([]);
@@ -98,6 +109,21 @@ onMounted(() => { load(); loadCategories(); });
 .seasonings { padding: 20px; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .header h1 { margin: 0; }
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.btn-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 .search-row, .add-row { display: flex; gap: 10px; margin-bottom: 12px; }
 .search-row input, .add-row input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 44px; font-size: 16px; }
 .add-row select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 44px; }
@@ -119,6 +145,8 @@ onMounted(() => { load(); loadCategories(); });
 @media (max-width: 767px) {
   .seasonings { padding: 16px; }
   .header h1 { text-align: center; }
+  .header-left { justify-content: center; position: relative; width: 100%; }
+  .btn-back { position: absolute; left: 0; }
   .add-row { flex-wrap: wrap; }
   .add-row input { flex-basis: 100%; }
   .add-row select { flex: 1; }

@@ -1,7 +1,15 @@
 <template>
   <div class="inventory">
     <div class="header">
-      <h1>🥬 库存管理</h1>
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <h1>🥬 库存管理</h1>
+      </div>
       <button @click="showAddModal = true" class="btn btn-primary">添加库存</button>
     </div>
 
@@ -90,8 +98,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useGoBack } from '../composables/useGoBack';
 import { inventoryApi, ingredientApi } from '../services/api';
 import type { InventoryItem, Ingredient } from '../types';
+
+const { goBack } = useGoBack('/me');
 
 const inventoryItems = ref<InventoryItem[]>([]);
 const expiringItems = ref<InventoryItem[]>([]);
@@ -239,6 +250,32 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.btn-back {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-back:hover {
+  background: rgba(7, 132, 255, 0.08);
 }
 
 .expiring-alert {
@@ -481,6 +518,17 @@ onMounted(() => {
     font-size: 1.5rem;
     margin: 0;
     text-align: center;
+  }
+
+  .header-left {
+    justify-content: center;
+    position: relative;
+    width: 100%;
+  }
+
+  .btn-back {
+    position: absolute;
+    left: 0;
   }
 
   .header .btn {

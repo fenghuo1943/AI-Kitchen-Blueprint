@@ -1,7 +1,7 @@
 """分类数据访问层（菜谱/食材/调料分类，按 type 分发到对应表）"""
 from typing import Optional, List, Type
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case
 
 from app.db.models import RecipeCategory, IngredientCategory, SeasoningCategory
 
@@ -45,12 +45,13 @@ class CategoryRepository:
         return model
 
     def list(self, type_: str) -> List:
-        """分类列表"""
+        """分类列表（默认分类「默认」始终置顶）"""
         model = self._model(type_)
         order = model.sort_order if hasattr(model, "sort_order") else model.id
+        default_first = case((model.name == DEFAULT_CATEGORY_NAME, 0), else_=1)
         return self.db.query(model).filter(
             model.deleted_at.is_(None)
-        ).order_by(order, model.created_at).all()
+        ).order_by(default_first, order, model.created_at).all()
 
     def get(self, type_: str, category_id: str):
         """根据ID获取分类（排除已删除）"""
