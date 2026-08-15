@@ -76,9 +76,12 @@ def delete_ingredient(
     ingredient_id: str,
     service: IngredientService = Depends(get_ingredient_service)
 ):
-    """删除食材"""
-    if not service.delete_ingredient(ingredient_id):
-        raise HTTPException(status_code=404, detail="食材不存在")
+    """删除食材（被菜谱使用时不允删除）"""
+    try:
+        if not service.delete_ingredient(ingredient_id):
+            raise HTTPException(status_code=404, detail="食材不存在")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return None
 
 

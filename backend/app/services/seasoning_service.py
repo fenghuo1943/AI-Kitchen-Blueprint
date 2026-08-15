@@ -77,7 +77,15 @@ class SeasoningService:
         return self._to_response(seasoning)
 
     def delete_seasoning(self, seasoning_id: str) -> bool:
-        """删除调料"""
+        """删除调料（软删除），若仍被菜谱使用则拒绝删除"""
+        if not self.repository.get_by_id(seasoning_id):
+            return False
+        recipes = self.repository.find_recipes_by_seasoning(seasoning_id)
+        if recipes:
+            titles = "、".join(title for _, title in recipes)
+            raise ValueError(
+                f"该调料已被 {len(recipes)} 个菜谱使用（{titles}），请先修改或删除这些菜谱后再试"
+            )
         return self.repository.soft_delete(seasoning_id)
 
     def _to_response(self, seasoning: Seasoning) -> SeasoningResponse:

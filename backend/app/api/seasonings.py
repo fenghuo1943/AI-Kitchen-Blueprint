@@ -85,7 +85,10 @@ def delete_seasoning(
     seasoning_id: str,
     service: SeasoningService = Depends(get_seasoning_service)
 ):
-    """删除调料"""
-    if not service.delete_seasoning(seasoning_id):
-        raise HTTPException(status_code=404, detail="调料不存在")
+    """删除调料（被菜谱使用时不允删除）"""
+    try:
+        if not service.delete_seasoning(seasoning_id):
+            raise HTTPException(status_code=404, detail="调料不存在")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return None

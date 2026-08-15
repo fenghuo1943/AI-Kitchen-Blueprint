@@ -106,7 +106,15 @@ class IngredientService:
         return self._to_response(ingredient)
 
     def delete_ingredient(self, ingredient_id: str) -> bool:
-        """删除食材（软删除）"""
+        """删除食材（软删除），若仍被菜谱使用则拒绝删除"""
+        if not self.repository.get_by_id(ingredient_id):
+            return False
+        recipes = self.repository.find_recipes_by_ingredient(ingredient_id)
+        if recipes:
+            titles = "、".join(title for _, title in recipes)
+            raise ValueError(
+                f"该食材已被 {len(recipes)} 个菜谱使用（{titles}），请先修改或删除这些菜谱后再试"
+            )
         return self.repository.soft_delete(ingredient_id)
 
     def add_alias(self, ingredient_id: str, alias_name: str) -> Optional[IngredientAlias]:

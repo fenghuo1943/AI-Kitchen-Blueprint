@@ -238,9 +238,10 @@ async function deleteIngredient(id: string) {
   if (!confirm('确定要删除这个食材吗？')) return;
   try {
     await ingredientApi.delete(id);
+    toast('已删除');
     loadIngredients();
-  } catch (error) {
-    console.error('Failed to delete ingredient:', error);
+  } catch (error: any) {
+    toast(error?.response?.data?.detail || '删除失败', 'error');
   }
 }
 

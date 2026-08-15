@@ -95,3 +95,59 @@ class TestSeasoningsAPI:
         # 验证已删除
         response = client.get(f"/api/v1/seasonings/{created['id']}")
         assert response.status_code == 404
+
+    def test_delete_seasoning_in_use(self, client: TestClient, db_session):
+        """测试删除被菜谱使用的调料被拒绝"""
+        # 测试库用 StaticPool 单连接 + 外层事务，commit 不真正落库，
+        # 需显式提交连接，避免首个 API 请求会话关闭时回滚清空数据。
+        from app.db.models import Recipe, RecipeSeasoning, Seasoning
+        import uuid
+
+        seasoning = Seasoning(id=str(uuid.uuid4()), canonical_name="老抽")
+        db_session.add(seasoning)
+        recipe = Recipe(id=str(uuid.uuid4()), title="红烧肉", status="published")
+        db_session.add(recipe)
+        db_session.commit()
+
+        link = RecipeSeasoning(
+            id=str(uuid.uuid4()),
+            recipe_id=recipe.id,
+            seasoning_id=seasoning.id,
+        )
+        db_session.add(link)
+        db_session.commit()
+        db_session.connection().commit()
+
+        response = client.delete(f"/api/v1/seasonings/{seasoning.id}")
+        assert response.status_code == 409
+        data = response.json()
+        assert "红烧肉" in data["detail"]
+        assert "1 个菜谱" in data["detail"]
+
+        # 调料仍然存在
+        resp = client.get(f"/api/v1/seasonings/{seasoning.id}")
+        assert resp.status_code == 200
+
+    def test_delete_seasoning_used_only_by_deleted_recipe(self, client: TestClient, db_session):
+        """测试调料仅被软删除菜谱使用时，可正常删除"""
+        from app.db.models import Recipe, RecipeSeasoning, Seasoning
+        from datetime import datetime
+        import uuid
+
+        seasoning = Seasoning(id=str(uuid.uuid4()), canonical_name="蚝油")
+        db_session.add(seasoning)
+        recipe = Recipe(id=str(uuid.uuid4()), title="青菜", status="published", deleted_at=datetime.utcnow())
+        db_session.add(recipe)
+        db_session.commit()
+
+        link = RecipeSeasoning(
+            id=str(uuid.uuid4()),
+            recipe_id=recipe.id,
+            seasoning_id=seasoning.id,
+        )
+        db_session.add(link)
+        db_session.commit()
+        db_session.connection().commit()
+
+        response = client.delete(f"/api/v1/seasonings/{seasoning.id}")
+        assert response.status_code == 204

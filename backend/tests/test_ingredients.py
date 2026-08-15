@@ -90,6 +90,32 @@ class TestIngredientsAPI:
         response = client.get(f"/api/v1/ingredients/{sample_ingredient.id}")
         assert response.status_code == 404
 
+    def test_delete_ingredient_in_use(self, client: TestClient, sample_ingredient, sample_recipe, db_session):
+        """测试删除被菜谱使用的食材被拒绝"""
+        # 测试库用 StaticPool 单连接 + 外层事务，fixture 的 commit 不真正落库，
+        # 需显式提交连接，避免首个 API 请求会话关闭时回滚清空数据。
+        db_session.connection().commit()
+
+        response = client.delete(f"/api/v1/ingredients/{sample_ingredient.id}")
+        assert response.status_code == 409
+        data = response.json()
+        assert "测试菜谱" in data["detail"]
+        assert "1 个菜谱" in data["detail"]
+
+        # 食材仍然存在
+        resp = client.get(f"/api/v1/ingredients/{sample_ingredient.id}")
+        assert resp.status_code == 200
+
+    def test_delete_ingredient_used_only_by_deleted_recipe(self, client: TestClient, sample_ingredient, sample_recipe, db_session):
+        """测试食材仅被软删除菜谱使用时，可正常删除"""
+        from datetime import datetime
+        sample_recipe.deleted_at = datetime.utcnow()
+        db_session.commit()
+        db_session.connection().commit()
+
+        response = client.delete(f"/api/v1/ingredients/{sample_ingredient.id}")
+        assert response.status_code == 204
+
     def test_add_alias(self, client: TestClient, sample_ingredient):
         """测试添加别名"""
         response = client.post(

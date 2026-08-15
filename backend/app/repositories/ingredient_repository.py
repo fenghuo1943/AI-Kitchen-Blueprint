@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from app.db.models import Ingredient, IngredientAlias, IngredientCategory
+from app.db.models import Ingredient, IngredientAlias, IngredientCategory, Recipe, RecipeIngredient
 
 
 class IngredientRepository:
@@ -89,6 +89,15 @@ class IngredientRepository:
         self.db.commit()
         self.db.refresh(ingredient)
         return ingredient
+
+    def find_recipes_by_ingredient(self, ingredient_id: str):
+        """查找使用了该食材的菜谱（排除已软删除的），返回 [(recipe_id, title), ...]"""
+        return self.db.query(Recipe.id, Recipe.title).join(
+            RecipeIngredient, RecipeIngredient.recipe_id == Recipe.id
+        ).filter(
+            RecipeIngredient.ingredient_id == ingredient_id,
+            Recipe.deleted_at.is_(None)
+        ).all()
 
     def soft_delete(self, ingredient_id: str) -> bool:
         """软删除食材"""

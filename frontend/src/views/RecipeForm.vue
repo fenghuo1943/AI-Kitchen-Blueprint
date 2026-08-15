@@ -2,7 +2,7 @@
   <div class="recipe-form">
     <div class="header">
       <div class="header-left">
-        <button @click="$router.back()" class="btn-back" aria-label="返回">
+        <button @click="goBack" class="btn-back" aria-label="返回">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -116,7 +116,7 @@
       </div>
 
       <div class="actions">
-        <button type="button" class="btn btn-secondary" @click="$router.back()">取消</button>
+        <button type="button" class="btn btn-secondary" @click="goBack">取消</button>
         <button type="submit" class="btn btn-primary" :disabled="!form.title || saving">
           {{ saving ? '保存中...' : (isEdit ? '保存修改' : '创建菜谱') }}
         </button>
@@ -173,11 +173,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { recipeApi, ingredientApi, seasoningApi, categoryApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
+import { useGoBack } from '../composables/useGoBack';
 import type { Category, Ingredient, Seasoning, Recipe } from '../types';
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const { goBack } = useGoBack();
 const isEdit = computed(() => !!route.params.id);
 
 const form = ref({
@@ -319,12 +321,14 @@ async function save() {
       await recipeApi.update(route.params.id as string, payload);
       appStore.bumpRecipeVersion('update'); // 通知缓存的菜谱库列表需要刷新
       toast('保存成功');
-      router.push(`/recipes/${route.params.id}`);
+      // 用 replace 替换编辑页历史记录：详情页按返回时回到编辑前的页面，而非已保存的编辑页
+      router.replace(`/recipes/${route.params.id}`);
     } else {
       const recipe = await recipeApi.create(payload);
       appStore.bumpRecipeVersion('create'); // 通知缓存的菜谱库列表需要刷新
       toast('创建成功');
-      router.push(`/recipes/${recipe.id}`);
+      // 同上：新建页不留在历史栈，详情页按返回时回到新建前的页面
+      router.replace(`/recipes/${recipe.id}`);
     }
   } catch (e: any) {
     toast(e?.response?.data?.detail || '保存失败', 'error');

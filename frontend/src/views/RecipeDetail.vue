@@ -2,7 +2,7 @@
   <div class="recipe-detail" v-if="recipe">
     <div class="header">
       <div class="header-left">
-        <button @click="$router.back()" class="btn-back" aria-label="返回">
+        <button @click="goBack" class="btn-back" aria-label="返回">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
             <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -125,11 +125,13 @@ import AddToMenuModal from '../components/AddToMenuModal.vue';
 import { recipeApi, recommendationApi, favoriteApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
+import { useGoBack } from '../composables/useGoBack';
 import type { Recipe } from '../types';
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const { goBack } = useGoBack();
 
 const recipe = ref<Recipe | null>(null);
 const coverageInput = ref('');

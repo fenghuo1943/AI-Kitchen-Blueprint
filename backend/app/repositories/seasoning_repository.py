@@ -3,7 +3,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from app.db.models import Seasoning, SeasoningCategory
+from app.db.models import Seasoning, SeasoningCategory, Recipe, RecipeSeasoning
 
 
 class SeasoningRepository:
@@ -69,6 +69,15 @@ class SeasoningRepository:
         self.db.commit()
         self.db.refresh(seasoning)
         return seasoning
+
+    def find_recipes_by_seasoning(self, seasoning_id: str):
+        """查找使用了该调料的菜谱（排除已软删除的），返回 [(recipe_id, title), ...]"""
+        return self.db.query(Recipe.id, Recipe.title).join(
+            RecipeSeasoning, RecipeSeasoning.recipe_id == Recipe.id
+        ).filter(
+            RecipeSeasoning.seasoning_id == seasoning_id,
+            Recipe.deleted_at.is_(None)
+        ).all()
 
     def soft_delete(self, seasoning_id: str) -> bool:
         """软删除调料"""
