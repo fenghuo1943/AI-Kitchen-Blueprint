@@ -26,13 +26,13 @@
     </div>
 
     <div v-else-if="recipes.length > 0" class="recipe-list">
-      <div v-for="recipe in recipes" :key="recipe.id" class="recipe-row">
+      <div v-for="recipe in recipes" :key="recipe.id" class="recipe-row" @click="viewRecipe(recipe.id)">
         <div class="row-cover" v-if="recipe.cover">
           <img :src="recipe.cover" :alt="recipe.title" />
         </div>
         <div class="row-main">
           <div class="row-title-line">
-            <span class="row-title" @click="viewRecipe(recipe.id)">{{ recipe.title }}</span>
+            <span class="row-title">{{ recipe.title }}</span>
             <span :class="['status-badge', recipe.status]">{{ statusLabel(recipe.status) }}</span>
           </div>
           <div class="row-meta">
@@ -47,9 +47,8 @@
           </div>
         </div>
         <div class="row-actions">
-          <button class="btn-small btn-secondary" @click="viewRecipe(recipe.id)">查看</button>
-          <button class="btn-small btn-confirm" @click="editRecipe(recipe.id)">编辑</button>
-          <button class="btn-small btn-danger" @click="deleteRecipe(recipe.id, recipe.title)">删除</button>
+          <button class="btn-small btn-confirm" @click.stop="editRecipe(recipe.id)">编辑</button>
+          <button class="btn-small btn-danger" @click.stop="deleteRecipe(recipe.id, recipe.title)">删除</button>
         </div>
       </div>
     </div>
@@ -239,6 +238,12 @@ onActivated(() => {
   gap: 14px;
   padding: 14px 16px;
   border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.recipe-row:hover {
+  background: #fafafa;
 }
 
 .recipe-row:last-child {
@@ -382,7 +387,7 @@ onActivated(() => {
 }
 
 .btn {
-  padding: 10px 20px;
+  padding: 10px 16px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -395,9 +400,16 @@ onActivated(() => {
 }
 
 .btn-small {
-  padding: 8px 12px;
+  padding: 8px 14px;
   font-size: 12px;
   min-height: 36px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-primary {
@@ -410,12 +422,12 @@ onActivated(() => {
 }
 
 .btn-secondary {
-  background: #e0e0e0;
+  background: #f0f0f0;
   color: #333;
 }
 
 .btn-secondary:hover {
-  background: #d0d0d0;
+  background: #e0e0e0;
 }
 
 .btn-confirm {
@@ -423,9 +435,17 @@ onActivated(() => {
   color: white;
 }
 
+.btn-confirm:hover {
+  background: #357abd;
+}
+
 .btn-danger {
   background: #f44336;
   color: white;
+}
+
+.btn-danger:hover {
+  background: #d32f2f;
 }
 
 /* 移动端响应式样式 */
@@ -463,9 +483,9 @@ onActivated(() => {
   }
 
   .recipe-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
   }
 
   .row-cover {
@@ -473,11 +493,13 @@ onActivated(() => {
   }
 
   .row-actions {
-    width: 100%;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .row-actions .btn-small {
-    flex: 1;
+    flex: none;
   }
 
   .pagination {
