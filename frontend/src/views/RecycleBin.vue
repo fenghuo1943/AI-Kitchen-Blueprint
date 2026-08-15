@@ -1,8 +1,8 @@
 <template>
   <div class="recycle-bin">
     <div class="header">
-      <h1>🗑 回收站</h1>
-      <button @click="$router.back()" class="btn btn-secondary">← 返回</button>
+      <button @click="$router.back()" class="btn btn-secondary btn-back">返回</button>
+      <h1>回收站</h1>
     </div>
 
     <div v-if="loading && !items.length" class="empty-state">
@@ -93,7 +93,7 @@ onMounted(() => {
 
 <style scoped>
 .recycle-bin { padding: 20px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .header h1 { margin: 0; }
 .list { background: white; border-radius: 12px; overflow: hidden; }
 .list-row {
@@ -124,9 +124,8 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .recycle-bin { padding: 16px; }
-  .header h1 { text-align: center; }
-  .list-row { flex-direction: column; align-items: stretch; }
-  .row-actions { width: 100%; }
-  .row-actions .btn-small { flex: 1; }
+  .list-row { flex-direction: row; align-items: center; }
+  .row-actions { flex-direction: column; align-items: stretch; gap: 6px; }
+  .row-actions .btn-small { min-height: 32px; padding: 6px 12px; }
 }
 </style>
