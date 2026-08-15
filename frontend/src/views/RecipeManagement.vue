@@ -12,11 +12,19 @@
         placeholder="搜索菜谱 / 拼音 / 食材..."
         @input="debouncedSearch"
       />
-      <select v-model="statusFilter" @change="loadRecipes">
+      <select v-model="categoryFilter" class="filter-category" @change="loadRecipes">
+        <option value="">全部分类</option>
+        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+      <select v-model="statusFilter" class="filter-status" @change="loadRecipes">
         <option value="">全部状态</option>
         <option value="draft">草稿</option>
         <option value="published">已发布</option>
         <option value="archived">已归档</option>
+      </select>
+      <select v-model="sortFilter" class="filter-sort" @change="loadRecipes">
+        <option value="date">按添加时间倒序</option>
+        <option value="title">按名称正序</option>
       </select>
     </div>
 
@@ -69,10 +77,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated } from 'vue';
 import { useRouter } from 'vue-router';
-import { recipeApi } from '../services/api';
+import { recipeApi, categoryApi } from '../services/api';
 import { useAppStore } from '../stores/app';
 import { toast } from '../composables/useToast';
-import type { Recipe } from '../types';
+import type { Recipe, Category } from '../types';
 
 defineOptions({ name: 'RecipeManagement' });
 
@@ -80,11 +88,14 @@ const router = useRouter();
 const appStore = useAppStore();
 
 const recipes = ref<Recipe[]>([]);
+const categories = ref<Category[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const searchQuery = ref('');
+const categoryFilter = ref('');
 const statusFilter = ref('');
+const sortFilter = ref('date'); // 默认按添加时间倒序
 const loading = ref(false);
 
 let loadSeq = 0; // 请求序号，用于忽略过期的慢响应
@@ -121,7 +132,8 @@ async function loadRecipes() {
     const response = await recipeApi.list({
       query: searchQuery.value || undefined,
       status: statusFilter.value || undefined,
-      sort: 'date',
+      category_id: categoryFilter.value || undefined,
+      sort: sortFilter.value,
       page: page.value,
       page_size: pageSize
     });
@@ -173,7 +185,15 @@ function nextPage() {
   }
 }
 
-onMounted(loadRecipes);
+onMounted(async () => {
+  loadRecipes();
+  try {
+    const res = await categoryApi.list('recipe');
+    categories.value = res.data;
+  } catch (error) {
+    console.error('Failed to load categories:', error);
+  }
+});
 
 // 从编辑/详情页返回时刷新（若菜谱有变化）
 onActivated(() => {
@@ -209,6 +229,7 @@ onActivated(() => {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
 }
@@ -472,14 +493,39 @@ onActivated(() => {
   }
 
   .filters {
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
   .filters input,
   .filters select {
-    width: 100%;
     min-height: 44px;
+  }
+
+  /* 移动端重排：输入框 + 状态 同一行，分类 + 排序 同一行 */
+  .filters input {
+    flex: 1 1 auto;
+    min-width: 0;
+    order: 1;
+  }
+
+  .filters .filter-status {
+    flex: 0 0 auto;
+    width: auto;
+    order: 2;
+  }
+
+  .filters .filter-category {
+    flex: 0 0 auto;
+    width: auto;
+    order: 3;
+  }
+
+  .filters .filter-sort {
+    flex: 0 0 auto;
+    width: auto;
+    order: 4;
   }
 
   .recipe-row {
