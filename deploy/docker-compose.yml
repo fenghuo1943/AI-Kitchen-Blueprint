@@ -14,7 +14,7 @@ services:
     working_dir: /app
     # 代码挂载：后端整个目录映射进容器，改代码后重启容器即可生效
     volumes:
-      - ../backend:/app
+      - ./backend:/app
       # 入口脚本：首次启动自动装依赖，正常重启不重复装（镜像保持干净）
       - ./backend-entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
@@ -25,6 +25,8 @@ services:
       - PYTHONUNBUFFERED=1
     ports:
       - "8001:8001"
+    networks:
+      - kitchen
     restart: unless-stopped
 
   frontend:
@@ -32,12 +34,18 @@ services:
     container_name: ai-kitchen-frontend
     volumes:
       # 前端构建产物：Windows 上 npm run build 后把 dist 传到 NAS 对应目录
-      - ../frontend/dist:/usr/share/nginx/html:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
       # nginx 配置：静态托管 + /api 反向代理到后端
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       # 若 80 端口被群晖 Web Station 占用，改成 8080:80
-      - "80:80"
+      - "8005:80"
+    networks:
+      - kitchen
     depends_on:
       - backend
     restart: unless-stopped
+
+networks:
+	kitchen:
+		external: true
