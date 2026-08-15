@@ -1,7 +1,7 @@
 """分类数据访问层（菜谱/食材/调料分类，按 type 分发到对应表）"""
 from typing import Optional, List, Type
 from sqlalchemy.orm import Session
-from sqlalchemy import case
+from sqlalchemy import case, func
 
 from app.db.models import RecipeCategory, IngredientCategory, SeasoningCategory
 
@@ -29,6 +29,49 @@ def get_default_category_id(db: Session, type_: str) -> str:
         raise ValueError(f"未知分类类型: {type_}")
     cat = db.query(model).filter(model.name == DEFAULT_CATEGORY_NAME).first()
     return cat.id if cat else DEFAULT_CATEGORY_ID
+
+
+def get_or_create_category_id(db: Session, type_: str, name: str) -> str:
+    """按名称解析分类 ID；不存在则自动创建，返回分类 ID。
+
+    - name 为空或未识别 → 回落默认分类；
+    - 同名分类已存在（含软删）→ 复用；软删的同名分类会被复活（canonical 分类为系统资产）；
+    - 菜谱分类自动分配递增 sort_order。
+    - 只 flush 不 commit，交由调用方事务统一提交，保证与外部写入原子。
+    """
+    name = (name or "").strip()
+    if not name:
+        return get_default_category_id(db, type_)
+    model = CATEGORY_MODELS.get(type_)
+    if not model:
+        raise ValueError(f"未知分类类型: {type_}")
+    obj = db.query(model).filter(model.name == name).first()
+    if obj:
+        if obj.deleted_at is not None:
+            obj.deleted_at = None
+            db.flush()
+        return obj.id
+    obj = model(name=name)
+    if hasattr(model, "sort_order"):
+        max_order = db.query(func.max(model.sort_order)).scalar()
+        obj.sort_order = (max_order or 0) + 1
+    db.add(obj)
+    db.flush()
+    return obj.id
+
+
+def resolve_category_id(
+    db: Session,
+    type_: str,
+    explicit_id: Optional[str] = None,
+    name: Optional[str] = None,
+) -> str:
+    """统一分类解析入口：explicit_id 优先 → 其次按 name 解析（自动建/复用）→ 否则默认分类。"""
+    if explicit_id:
+        return explicit_id
+    if name:
+        return get_or_create_category_id(db, type_, name)
+    return get_default_category_id(db, type_)
 
 
 class CategoryRepository:

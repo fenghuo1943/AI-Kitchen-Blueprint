@@ -12,7 +12,6 @@ class TestIngredientsAPI:
             "/api/v1/ingredients",
             json={
                 "canonical_name": "白菜",
-                "category": "蔬菜",
                 "season_months": ["10", "11", "12", "1", "2", "3"],
                 "allergens": [],
                 "aliases": ["大白菜", "黄芽菜"]
@@ -21,7 +20,7 @@ class TestIngredientsAPI:
         assert response.status_code == 201
         data = response.json()
         assert data["canonical_name"] == "白菜"
-        assert data["category"] == "蔬菜"
+        assert data["category_name"] == "蔬菜"  # 无显式分类 → 按名称自动归类
         assert len(data["aliases"]) == 2
 
     def test_create_ingredient_duplicate_name(self, client: TestClient, sample_ingredient):
@@ -30,7 +29,6 @@ class TestIngredientsAPI:
             "/api/v1/ingredients",
             json={
                 "canonical_name": sample_ingredient.canonical_name,
-                "category": "蔬菜"
             }
         )
         assert response.status_code == 409
@@ -64,20 +62,21 @@ class TestIngredientsAPI:
         assert len(data["data"]) > 0
 
     def test_update_ingredient(self, client: TestClient, sample_ingredient):
-        """测试更新食材"""
+        """测试更新食材分类"""
+        cat = client.post("/api/v1/categories?type=ingredient", json={"name": "豆制品"}).json()
         response = client.patch(
             f"/api/v1/ingredients/{sample_ingredient.id}",
-            json={"category": "豆制品"}
+            json={"category_id": cat["id"]}
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["category"] == "豆制品"
+        assert data["category_name"] == "豆制品"
 
     def test_update_ingredient_not_found(self, client: TestClient):
         """测试更新不存在的食材"""
         response = client.patch(
             "/api/v1/ingredients/nonexistent-id",
-            json={"category": "豆制品"}
+            json={}
         )
         assert response.status_code == 404
 

@@ -22,6 +22,27 @@ class TestSeasoningsAPI:
         assert data["canonical_name"] == "生抽"
         assert data["pinyin"] == "shengchou"
 
+    def test_create_seasoning_auto_classify(self, client: TestClient):
+        """无 category_id 时按名称自动归类（生抽 → 基础调味）"""
+        response = client.post(
+            "/api/v1/seasonings",
+            json={"canonical_name": "生抽"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["category_name"] == "基础调味"
+
+    def test_create_seasoning_unknown_falls_back_default(self, client: TestClient):
+        """未识别名称回落默认分类"""
+        client.post("/api/v1/categories?type=seasoning", json={"name": "默认"})
+        response = client.post(
+            "/api/v1/seasonings",
+            json={"canonical_name": "神秘调味品X"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["category_name"] == "默认"
+
     def test_create_seasoning_with_category(self, client: TestClient):
         """测试创建带分类的调料"""
         cat = self._create_category(client)

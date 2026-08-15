@@ -42,7 +42,6 @@ class Ingredient(Base, TimestampMixin):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     canonical_name = Column(String(100), nullable=False, unique=True)
-    category = Column(String(50), nullable=True)
     category_id = Column(String(36), ForeignKey("ingredient_categories.id"), nullable=True)
     pinyin = Column(String(255), nullable=True)
     season_months = Column(String(200), nullable=True)  # JSON 格式: ["1","2","3"]

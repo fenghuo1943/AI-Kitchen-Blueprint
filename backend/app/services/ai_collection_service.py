@@ -19,6 +19,7 @@ from urllib.parse import unquote, urlparse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.category_classifier import classify_ingredient, classify_recipe, classify_seasoning
 from app.core.config import settings
 from app.core.pinyin import to_pinyin
 from app.db.database import get_db_context
@@ -38,7 +39,7 @@ from app.llm.prompts import (
     normalize_title, validate_recipe_reason,
 )
 from app.repositories.ai_collection_repository import AICollectionRepository
-from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
+from app.repositories.category_repository import resolve_category_id
 from app.repositories.ingredient_repository import IngredientRepository
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.recipe_repository import RecipeRepository
@@ -617,11 +618,11 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
-        # 未指定分类的采集菜谱落到默认分类（入库规则）
+        # 采集菜谱按标题自动分类（入库规则；未识别回落默认）
         db.add(RecipeCategoryLink(
             id=str(uuid.uuid4()),
             recipe_id=cand_recipe.id,
-            category_id=get_default_category_id(db, "recipe"),
+            category_id=resolve_category_id(db, "recipe", name=classify_recipe(recipe["title"])),
         ))
 
         # 调料兜底：静态词典未覆盖、但调料表中已维护的名字（用户手工新增的调料）→ 拆到调料
@@ -648,13 +649,13 @@ class AiCollectionService:
                 continue
             ingredient = ingredient_repo.get_by_name(name)
             if not ingredient:
-                # 未指定分类的食材落到默认分类（入库规则）
+                # 食材按名称自动分类（入库规则；未识别回落默认）
+                cat_name = classify_ingredient(name)
                 ingredient = Ingredient(
                     id=str(uuid.uuid4()),
                     canonical_name=name,
                     confidence_status="candidate",
-                    category=DEFAULT_CATEGORY_NAME,
-                    category_id=get_default_category_id(db, "ingredient"),
+                    category_id=resolve_category_id(db, "ingredient", name=cat_name),
                 )
                 db.add(ingredient)
                 db.flush()
@@ -677,12 +678,12 @@ class AiCollectionService:
                 continue
             seasoning = seasoning_repo.get_by_name(name)
             if not seasoning:
-                # 未指定分类的调料落到默认分类（入库规则）
+                # 调料按名称自动分类（入库规则；未识别回落默认）
                 seasoning = Seasoning(
                     id=str(uuid.uuid4()),
                     canonical_name=name,
                     pinyin=to_pinyin(name),
-                    category_id=get_default_category_id(db, "seasoning"),
+                    category_id=resolve_category_id(db, "seasoning", name=classify_seasoning(name)),
                 )
                 db.add(seasoning)
                 db.flush()

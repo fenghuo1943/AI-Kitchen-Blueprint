@@ -114,3 +114,72 @@ class TestCategoriesAPI:
 
         response = client.delete(f"/api/v1/categories/{cat['id']}?type=recipe")
         assert response.status_code == 400
+
+
+class TestCategoryHelpers:
+    """get_or_create_category_id / resolve_category_id 仓储层测试（自动分类的落库基石）"""
+
+    def test_get_or_create_creates_and_reuses(self, db_session):
+        from app.repositories.category_repository import get_or_create_category_id
+        from app.db.models import RecipeCategory
+
+        cid1 = get_or_create_category_id(db_session, "recipe", "川菜")
+        cid2 = get_or_create_category_id(db_session, "recipe", "川菜")
+        assert cid1 == cid2
+        assert db_session.query(RecipeCategory).filter(
+            RecipeCategory.id == cid1).count() == 1
+
+    def test_get_or_create_recipe_assigns_sort_order(self, db_session):
+        from app.repositories.category_repository import get_or_create_category_id
+        from app.db.models import RecipeCategory
+
+        cid1 = get_or_create_category_id(db_session, "recipe", "川菜")
+        cid2 = get_or_create_category_id(db_session, "recipe", "粤菜")
+        c1 = db_session.query(RecipeCategory).filter(RecipeCategory.id == cid1).first()
+        c2 = db_session.query(RecipeCategory).filter(RecipeCategory.id == cid2).first()
+        assert c1.sort_order == 1
+        assert c2.sort_order == 2
+
+    def test_get_or_create_empty_name_falls_back_default(self, db_session):
+        from app.repositories.category_repository import (
+            get_or_create_category_id, get_default_category_id,
+        )
+        from app.db.models import IngredientCategory
+
+        db_session.add(IngredientCategory(name="默认"))
+        db_session.flush()
+        cid = get_or_create_category_id(db_session, "ingredient", "")
+        assert cid == get_default_category_id(db_session, "ingredient")
+
+    def test_get_or_create_revives_soft_deleted(self, db_session):
+        from datetime import datetime
+        from app.repositories.category_repository import get_or_create_category_id
+        from app.db.models import IngredientCategory
+
+        cat = IngredientCategory(name="菌菇")
+        db_session.add(cat)
+        db_session.flush()
+        cat.deleted_at = datetime.utcnow()
+        db_session.flush()
+        cid = get_or_create_category_id(db_session, "ingredient", "菌菇")
+        assert cid == cat.id
+        db_session.refresh(cat)
+        assert cat.deleted_at is None
+
+    def test_resolve_category_id_priority(self, db_session):
+        from app.repositories.category_repository import resolve_category_id
+        from app.db.models import SeasoningCategory
+
+        default = SeasoningCategory(name="默认")
+        explicit = SeasoningCategory(name="酱料")
+        db_session.add_all([default, explicit])
+        db_session.flush()
+
+        # explicit_id 优先
+        assert resolve_category_id(
+            db_session, "seasoning", explicit_id=explicit.id, name="香辛料") == explicit.id
+        # 其次 name（自动建）
+        created = resolve_category_id(db_session, "seasoning", name="香辛料")
+        assert created != explicit.id and created != default.id
+        # 否则默认
+        assert resolve_category_id(db_session, "seasoning") == default.id

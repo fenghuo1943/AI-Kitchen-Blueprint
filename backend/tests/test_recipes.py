@@ -110,6 +110,43 @@ class TestRecipesAPI:
         response = client.get(f"/api/v1/recipes/{sample_recipe.id}")
         assert response.status_code == 404
 
+    def test_create_recipe_auto_classifies_category(self, client: TestClient):
+        """无 category_ids 时按标题自动归类（红烧肉 → 炖菜）"""
+        response = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "红烧肉",
+                "steps": [{"step_no": 1, "instruction": "小火慢炖"}],
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert "炖菜" in [c["name"] for c in data["categories"]]
+
+    def test_create_recipe_respects_explicit_categories(self, client: TestClient):
+        """显式 category_ids 原样保留，不被自动分类覆盖"""
+        cat = client.post("/api/v1/categories?type=recipe", json={"name": "川菜"}).json()
+        response = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "麻婆豆腐",
+                "category_ids": [cat["id"]],
+                "steps": [{"step_no": 1, "instruction": "麻辣炒制"}],
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert [c["name"] for c in data["categories"]] == ["川菜"]
+
+    def test_update_recipe_clear_categories_falls_back_default(self, client: TestClient, sample_recipe):
+        """update 清空 category_ids 回落默认（用户显式清空，不自动重分类）"""
+        client.post("/api/v1/categories?type=recipe", json={"name": "默认"})
+        cat = client.post("/api/v1/categories?type=recipe", json={"name": "川菜"}).json()
+        client.patch(f"/api/v1/recipes/{sample_recipe.id}", json={"category_ids": [cat["id"]]})
+        response = client.patch(f"/api/v1/recipes/{sample_recipe.id}", json={"category_ids": []})
+        assert response.status_code == 200
+        assert [c["name"] for c in response.json()["categories"]] == ["默认"]
+
     def test_publish_recipe(self, client: TestClient, sample_recipe):
         """测试发布菜谱"""
         response = client.post(f"/api/v1/recipes/{sample_recipe.id}/publish")

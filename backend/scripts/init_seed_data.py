@@ -107,11 +107,13 @@ def seed_data(db: Session):
 
     ingredient_objects = {}
     for data in ingredients_data:
-        cat_obj = ing_categories.get(data["category"])
+        cat_obj = ing_categories.get(data.get("category"))
         ingredient = Ingredient(
             id=generate_uuid(),
-            **data,
+            canonical_name=data["canonical_name"],
             pinyin=to_pinyin(data["canonical_name"]),
+            season_months=data.get("season_months"),
+            allergens=data.get("allergens"),
             category_id=cat_obj.id if cat_obj else None,
         )
         db.add(ingredient)

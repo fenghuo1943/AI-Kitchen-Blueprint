@@ -49,13 +49,13 @@ api.interceptors.response.use(
 
 // 食材 API
 export const ingredientApi = {
-  list: (params?: { query?: string; category?: string; category_id?: string; page?: number; page_size?: number }) =>
+  list: (params?: { query?: string; category_id?: string; page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<Ingredient>>('/ingredients', { params }),
 
   get: (id: string) =>
     api.get<any, Ingredient>(`/ingredients/${id}`),
 
-  create: (data: { canonical_name: string; category?: string; category_id?: string; aliases?: string[] }) =>
+  create: (data: { canonical_name: string; category_id?: string; aliases?: string[] }) =>
     api.post<any, Ingredient>('/ingredients', data),
 
   update: (id: string, data: Partial<Ingredient>) =>

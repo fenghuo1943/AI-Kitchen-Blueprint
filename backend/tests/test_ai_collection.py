@@ -14,8 +14,10 @@ import pytest
 
 from app.core.config import settings
 from app.db.models import (
-    IngestionCandidate, IngestionJob, Recipe, RecipeIngredient,
+    IngestionCandidate, IngestionJob, Ingredient, IngredientCategory,
+    Recipe, RecipeCategory, RecipeCategoryLink, RecipeIngredient,
     RecipeRevision, RecipeSeasoning, RecipeSource, RecipeStep, Seasoning,
+    SeasoningCategory,
 )
 from app.llm import LLMProvider, LLMUnavailableError, LLMValidationError
 from app.llm.factory import default_model_for
@@ -1229,6 +1231,54 @@ def test_persist_candidate_db_fallback_moves_user_seasonings(db_session, no_enqu
     assert {ri.ingredient.canonical_name for ri in ings} == {"西红柿", "鸡蛋"}
     seas = db_session.query(RecipeSeasoning).filter_by(recipe_id=candidate.recipe_id).all()
     assert {s.seasoning.canonical_name for s in seas} == {"鱼籽酱"}
+
+
+def test_persist_candidate_auto_classifies(db_session, no_enqueue, tavily_key):
+    """采集入库自动分类：菜谱/食材/调料按规则归类（西红柿炒鸡蛋→家常菜，西红柿→蔬菜，鸡蛋→蛋类，盐→基础调味）。"""
+    job = make_job(db_session)
+    recipe = make_recipe()
+    recipe["ingredients"].append({"name": "盐", "quantity": "适量"})
+    assert validate_recipe_reason(recipe) is None  # 盐 拆到 seasonings
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+
+    # 菜谱：西红柿炒鸡蛋 → 家常菜
+    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
+    rcat = db_session.query(RecipeCategory).get(link.category_id)
+    assert rcat.name == "家常菜"
+
+    # 食材：西红柿 → 蔬菜，鸡蛋 → 蛋类
+    tomato = db_session.query(Ingredient).filter_by(canonical_name="西红柿").first()
+    egg = db_session.query(Ingredient).filter_by(canonical_name="鸡蛋").first()
+    assert db_session.query(IngredientCategory).get(tomato.category_id).name == "蔬菜"
+    assert db_session.query(IngredientCategory).get(egg.category_id).name == "蛋类"
+
+    # 调料：盐 → 基础调味
+    sea = db_session.query(Seasoning).filter_by(canonical_name="盐").first()
+    assert db_session.query(SeasoningCategory).get(sea.category_id).name == "基础调味"
+
+
+def test_persist_candidate_unknown_ingredient_falls_back_default(db_session, no_enqueue, tavily_key):
+    """采集入库：未识别食材回落默认分类，而非留空。"""
+    from app.repositories.category_repository import get_default_category_id
+
+    job = make_job(db_session)
+    recipe = make_recipe()
+    recipe["ingredients"].append({"name": "神秘食材XYZ", "quantity": "1份"})
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    ing = db_session.query(Ingredient).filter_by(canonical_name="神秘食材XYZ").first()
+    assert ing is not None
+    assert ing.category_id == get_default_category_id(db_session, "ingredient")
 
 
 def test_approve_merge_merges_seasonings(db_session, no_enqueue, tavily_key):

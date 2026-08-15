@@ -39,7 +39,7 @@
         <div class="card-main" @click="editIngredient(ing)">
           <div class="ingredient-header">
             <h3>{{ ing.canonical_name }}</h3>
-            <span class="category-badge">{{ ing.category_name || ing.category || '未分类' }}</span>
+            <span class="category-badge">{{ ing.category_name || '未分类' }}</span>
           </div>
           <div class="ingredient-details">
             <div class="detail-item" v-if="ing.pinyin">

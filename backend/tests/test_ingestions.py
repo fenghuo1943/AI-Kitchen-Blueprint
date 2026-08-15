@@ -38,6 +38,37 @@ class TestIngestionsAPI:
         assert data["stage"] == "published"
         assert data["result_recipe_id"] is not None
 
+    def test_manual_ingestion_auto_classifies(self, client: TestClient):
+        """人工录入入库后：菜谱/食材按规则自动归类"""
+        create = client.post(
+            "/api/v1/ingestions",
+            json={
+                "source_type": "manual",
+                "import_mode": "draft",
+                "recipe_data": {
+                    "title": "红烧肉",
+                    "ingredients": [
+                        {"name": "番茄", "quantity": "1", "unit": "个"},
+                        {"name": "鸡蛋", "quantity": "2", "unit": "个"},
+                    ],
+                    "steps": [{"instruction": "先炒后炖"}],
+                },
+            }
+        )
+        assert create.status_code == 201
+        recipe_id = create.json()["result_recipe_id"]
+        assert recipe_id
+
+        recipe = client.get(f"/api/v1/recipes/{recipe_id}").json()
+        # 菜谱：红烧肉 → 炖菜
+        assert "炖菜" in [c["name"] for c in recipe["categories"]]
+        # 食材：番茄 → 蔬菜，鸡蛋 → 蛋类（自动归类并创建同名分类）
+        ing_ids = {i["ingredient_name"]: i["ingredient_id"] for i in recipe["ingredients"]}
+        tomato = client.get(f"/api/v1/ingredients/{ing_ids['番茄']}").json()
+        egg = client.get(f"/api/v1/ingredients/{ing_ids['鸡蛋']}").json()
+        assert tomato["category_name"] == "蔬菜"
+        assert egg["category_name"] == "蛋类"
+
     def test_create_manual_ingestion_missing_data(self, client: TestClient):
         """测试创建人工录入的入库任务（缺少数据）"""
         response = client.post(

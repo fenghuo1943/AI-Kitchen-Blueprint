@@ -17,7 +17,6 @@ export interface Ingredient {
   id: string;
   canonical_name: string;
   pinyin?: string;
-  category?: string;
   category_id?: string;
   category_name?: string;
   season_months?: string[];

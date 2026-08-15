@@ -9,7 +9,8 @@ from app.db.models import (
     IngestionJob, RecipeSource, Recipe, RecipeCategoryLink,
     RecipeIngredient, RecipeStep,
 )
-from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
+from app.core.category_classifier import classify_ingredient, classify_recipe
+from app.repositories.category_repository import resolve_category_id
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.ingestion import (
@@ -135,11 +136,14 @@ class IngestionService:
             )
             recipe = self.ingestion_repository.create_recipe(recipe)
 
-            # 未指定分类的菜谱落到默认分类（入库规则）
+            # 菜谱按标题自动分类（入库规则；未识别回落默认）
             self.ingestion_repository.db.add(RecipeCategoryLink(
                 id=str(uuid.uuid4()),
                 recipe_id=recipe.id,
-                category_id=get_default_category_id(self.ingestion_repository.db, "recipe"),
+                category_id=resolve_category_id(
+                    self.ingestion_repository.db, "recipe",
+                    name=classify_recipe(recipe_data.title),
+                ),
             ))
 
             # 处理食材
@@ -152,13 +156,14 @@ class IngestionService:
                 ingredient = self.ingredient_repository.get_by_name(ingredient_name)
                 if not ingredient:
                     from app.db.models import Ingredient
-                    # 未指定分类的食材落到默认分类（入库规则）
+                    # 食材按名称自动分类（入库规则；未识别回落默认）
+                    cat_name = classify_ingredient(ingredient_name)
                     ingredient = Ingredient(
                         id=str(uuid.uuid4()),
                         canonical_name=ingredient_name,
                         confidence_status="candidate",
-                        category=DEFAULT_CATEGORY_NAME,
-                        category_id=get_default_category_id(self.ingredient_repository.db, "ingredient"),
+                        category_id=resolve_category_id(
+                            self.ingredient_repository.db, "ingredient", name=cat_name),
                     )
                     ingredient = self.ingredient_repository.create(ingredient)
 

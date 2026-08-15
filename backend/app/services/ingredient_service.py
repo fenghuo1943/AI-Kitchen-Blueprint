@@ -4,9 +4,10 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 
+from app.core.category_classifier import classify_ingredient
 from app.core.pinyin import to_pinyin
 from app.db.models import Ingredient, IngredientAlias
-from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id
+from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id, get_or_create_category_id
 from app.repositories.ingredient_repository import IngredientRepository
 from app.schemas.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
@@ -31,7 +32,6 @@ class IngredientService:
         """搜索食材"""
         ingredients, total = self.repository.search(
             query=request.query,
-            category=request.category,
             category_id=request.category_id,
             allergens_exclude=request.allergens_exclude,
             season_month=request.season_month,
@@ -52,20 +52,17 @@ class IngredientService:
         if existing:
             raise ValueError(f"食材名称 '{data.canonical_name}' 已存在")
 
-        # 未指定分类时统一落到默认分类
-        category = data.category
+        # 未指定分类时按名称自动分类（未识别回落默认）
         category_id = data.category_id
         if not category_id:
-            category_id = get_default_category_id(self.repository.db, "ingredient")
-            if not category:
-                category = DEFAULT_CATEGORY_NAME
+            cat_name = classify_ingredient(data.canonical_name) or DEFAULT_CATEGORY_NAME
+            category_id = get_or_create_category_id(self.repository.db, "ingredient", cat_name)
 
         # 创建食材
         ingredient = Ingredient(
             id=str(uuid.uuid4()),
             canonical_name=data.canonical_name,
             pinyin=to_pinyin(data.canonical_name),
-            category=category,
             category_id=category_id,
             season_months=json.dumps(data.season_months) if data.season_months else None,
             allergens=json.dumps(data.allergens) if data.allergens else None,
@@ -171,7 +168,6 @@ class IngredientService:
             id=ingredient.id,
             canonical_name=ingredient.canonical_name,
             pinyin=ingredient.pinyin,
-            category=ingredient.category,
             category_id=ingredient.category_id,
             category_name=self._category_name(ingredient.category_id),
             season_months=season_months,

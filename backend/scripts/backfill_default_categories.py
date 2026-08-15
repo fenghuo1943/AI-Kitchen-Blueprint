@@ -76,19 +76,10 @@ def backfill(db: Session):
         added_links += 1
     print(f"菜谱：{len(no_cat_recipes)} 个无分类 → 新增 {added_links} 条默认分类关联")
 
-    # 2) 食材：category_id 为空 → 设为默认分类（category 字符串也为空时补 '默认'）
-    ing_no_cat = (
-        db.query(Ingredient.id, Ingredient.category)
-        .filter(Ingredient.category_id.is_(None))
-        .all()
-    )
-    ing_updated = 0
-    for iid, cat_str in ing_no_cat:
-        update = {"category_id": default_ing_cat}
-        if not (cat_str or "").strip():
-            update["category"] = "默认"
-        db.query(Ingredient).filter(Ingredient.id == iid).update(update)
-        ing_updated += 1
+    # 2) 食材：category_id 为空 → 设为默认分类
+    ing_no_cat = db.query(Ingredient.id).filter(Ingredient.category_id.is_(None)).all()
+    for (iid,) in ing_no_cat:
+        db.query(Ingredient).filter(Ingredient.id == iid).update({"category_id": default_ing_cat})
     print(f"食材：{len(ing_no_cat)} 个无分类 → 已设为默认分类")
 
     # 3) 调料：category_id 为空 → 设为默认分类

@@ -34,7 +34,6 @@ class IngredientRepository:
     def search(
         self,
         query: Optional[str] = None,
-        category: Optional[str] = None,
         category_id: Optional[str] = None,
         allergens_exclude: Optional[List[str]] = None,
         season_month: Optional[str] = None,
@@ -44,20 +43,17 @@ class IngredientRepository:
         """搜索食材"""
         stmt = self.db.query(Ingredient).filter(Ingredient.deleted_at.is_(None))
 
-        # 关键词搜索（名称、旧分类、拼音前缀）
+        # 关键词搜索（名称、拼音前缀）
         if query:
             search_filter = or_(
                 Ingredient.canonical_name.contains(query),
-                Ingredient.category.contains(query),
                 Ingredient.pinyin.like(f"{query}%")
             )
             stmt = stmt.filter(search_filter)
 
-        # 分类筛选（新分类ID优先）
+        # 分类筛选（分类ID）
         if category_id:
             stmt = stmt.filter(Ingredient.category_id == category_id)
-        elif category:
-            stmt = stmt.filter(Ingredient.category == category)
 
         # 过敏原排除
         if allergens_exclude:

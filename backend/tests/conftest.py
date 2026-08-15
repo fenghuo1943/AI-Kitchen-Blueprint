@@ -94,7 +94,6 @@ def sample_ingredient(db_session):
     ingredient = Ingredient(
         id=str(uuid.uuid4()),
         canonical_name="测试食材",
-        category="蔬菜",
         confidence_status="verified"
     )
     db_session.add(ingredient)

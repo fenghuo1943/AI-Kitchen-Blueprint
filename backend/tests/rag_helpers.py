@@ -27,7 +27,6 @@ def make_recipe(db_session, title="番茄炒鸡蛋", summary="家常快手菜",
     ing = Ingredient(
         id=str(uuid.uuid4()),
         canonical_name=ingredient_name,
-        category="蔬菜",
         confidence_status="verified",
     )
     db_session.add(ing)

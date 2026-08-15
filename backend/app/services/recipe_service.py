@@ -3,9 +3,10 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 
+from app.core.category_classifier import classify_recipe
 from app.core.pinyin import to_pinyin
 from app.db.models import Recipe, RecipeIngredient, RecipeStep
-from app.repositories.category_repository import get_default_category_id
+from app.repositories.category_repository import get_default_category_id, resolve_category_id
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.tasks.executor import enqueue_index, enqueue_delete
@@ -236,8 +237,11 @@ class RecipeService:
             self.recipe_repository.add_tags(recipe_id, tags)
 
         category_ids = list(category_ids or [])
-        if not category_ids:  # 未指定分类时落到默认分类（入库规则）
-            category_ids = [get_default_category_id(self.recipe_repository.db, "recipe")]
+        if not category_ids:  # 未指定分类时按标题自动分类（入库规则；未识别回落默认）
+            recipe = self.recipe_repository.get_by_id(recipe_id)
+            title = recipe.title if recipe else None
+            category_ids = [resolve_category_id(
+                self.recipe_repository.db, "recipe", name=classify_recipe(title))]
         for cid in category_ids:
             self.recipe_repository.add_category(recipe_id, cid)
 

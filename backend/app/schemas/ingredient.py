@@ -7,7 +7,6 @@ from datetime import datetime
 class IngredientBase(BaseModel):
     """食材基础模式"""
     canonical_name: str = Field(..., min_length=1, max_length=100, description="标准名称")
-    category: Optional[str] = Field(None, max_length=50, description="分类（旧字符串字段，兼容）")
     category_id: Optional[str] = Field(None, description="食材分类ID")
     season_months: Optional[List[str]] = Field(None, description="应季月份 [1-12]")
     allergens: Optional[List[str]] = Field(None, description="过敏原")
@@ -23,7 +22,6 @@ class IngredientCreate(IngredientBase):
 class IngredientUpdate(BaseModel):
     """更新食材"""
     canonical_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    category: Optional[str] = Field(None, max_length=50)
     category_id: Optional[str] = None
     season_months: Optional[List[str]] = None
     allergens: Optional[List[str]] = None
@@ -65,7 +63,6 @@ class IngredientListResponse(BaseModel):
 class IngredientSearchRequest(BaseModel):
     """食材搜索请求"""
     query: Optional[str] = Field(None, description="搜索关键词")
-    category: Optional[str] = Field(None, description="分类筛选（旧字符串字段）")
     category_id: Optional[str] = Field(None, description="食材分类ID筛选")
     allergens_exclude: Optional[List[str]] = Field(None, description="排除的过敏原")
     season_month: Optional[str] = Field(None, description="应季月份筛选")
