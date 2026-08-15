@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { title: '菜谱库' }
     },
     {
+      path: '/recipes/manage',
+      name: 'recipe-manage',
+      component: () => import('../views/RecipeManagement.vue'),
+      meta: { title: '菜谱管理' }
+    },
+    {
       path: '/recipes/new',
       name: 'recipe-new',
       component: () => import('../views/RecipeForm.vue'),

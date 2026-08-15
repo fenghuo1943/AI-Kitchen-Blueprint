@@ -24,6 +24,11 @@
         <span class="menu-label">回收站</span>
         <span class="menu-arrow">›</span>
       </router-link>
+      <router-link to="/recipes/manage" class="menu-item">
+        <span class="menu-icon">📖</span>
+        <span class="menu-label">菜谱管理</span>
+        <span class="menu-arrow">›</span>
+      </router-link>
       <router-link to="/categories" class="menu-item">
         <span class="menu-icon">📁</span>
         <span class="menu-label">分类管理</span>
