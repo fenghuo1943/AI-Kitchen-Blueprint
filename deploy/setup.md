@@ -5,7 +5,8 @@
 - 后端：`python:3.13-slim` 通用镜像，整个 `backend/` 目录挂载到容器内 `/app`
 - 前端：`nginx:alpine` 通用镜像，`frontend/dist` 挂载为静态文件
 - **改代码 = 上传/推送代码 + 重启后端**，不重建镜像
-- **依赖有变动 = 容器内手动 `pip install`**，镜像始终保持最小
+- **依赖装到 NAS 硬盘目录（`backend/data/python`）**：requirements 更新后重启即自动重装，重建容器不重装
+- 部署文件在**仓库根目录**：`docker-compose.yml` / `nginx.conf` / `backend-entrypoint.sh`
 
 ---
 
@@ -62,7 +63,7 @@ npm run build      # 产出 frontend/dist
 ### 4. 首次启动容器
 
 ```bash
-cd /volume1/docker/ai-kitchen/deploy
+cd /volume1/docker/ai-kitchen      # 仓库根目录（docker-compose.yml 所在处）
 docker compose up -d
 ```
 
@@ -75,12 +76,13 @@ docker compose up -d
 `docker compose up -d` 之后稍等片刻，容器日志里能看到：
 ```bash
 docker compose logs -f backend
-# 出现 ">> requirements.txt 有更新，正在安装/更新依赖..." 即为自动安装中
+# 出现 ">> 安装/更新后端依赖..." 即为自动安装中
 # 装完自动启动 uvicorn，出现 "Uvicorn running on http://0.0.0.0:8001" 即就绪
 ```
 
-> 依赖装在容器的可写层里（不在镜像里），镜像本体始终是干净的 `python:3.13-slim`；
-> 安装记录（`backend/data/.requirements.sha256`）在挂载目录里，容器重建也不会触发重复安装。
+> 依赖装到 **NAS 硬盘目录**：容器内 `/opt/pyuser` = 宿主机 `backend/data/python`（入口脚本用 `pip install --user`）。
+> 镜像本体始终是干净的 `python:3.13-slim`；依赖文件在群晖上直接可见、可备份。
+> **容器删除重建后依赖仍在（在 NAS 硬盘上），无需重装。**
 
 ### 6. 初始化数据库（首次）
 
@@ -92,8 +94,8 @@ docker compose exec backend python /app/scripts/init_seed_data.py
 
 ### 7. 验证
 
-- 浏览器打开 `http://群晖局域网IP` 应看到前端首页
-- `http://群晖局域网IP/api/v1/...` 能正常返回数据
+- 浏览器打开 `http://群晖局域网IP:8005` 应看到前端首页（端口对应 compose 里的 `8005:8005`，需与 nginx.conf 的 `listen 8005` 一致）
+- `http://群晖局域网IP:8005/api/v1/...` 能正常返回数据
 - 后端健康检查：`http://群晖局域网IP:8001/health`
 
 ---
@@ -104,8 +106,8 @@ docker compose exec backend python /app/scripts/init_seed_data.py
 
 1. 本地提交并 `git push`，然后 SSH 上群晖执行：
    ```bash
-   cd /volume1/docker/ai-kitchen/deploy
-   bash update.sh
+   cd /volume1/docker/ai-kitchen
+   bash deploy/update.sh
    ```
 2. 或者用 SMB 上传覆盖 `backend/` 下的改动文件，然后 `docker compose restart backend`。
 
@@ -121,12 +123,12 @@ docker compose exec backend python /app/scripts/init_seed_data.py
 所以更新依赖只需**重启后端**：
 
 ```bash
-cd /volume1/docker/ai-kitchen/deploy
+cd /volume1/docker/ai-kitchen
 docker compose restart backend
 ```
 
-> 想强制重装（如 pip 缓存损坏）可删掉安装记录再重启：
-> `docker compose exec backend rm -f /app/data/.requirements.sha256 && docker compose restart backend`
+> 想彻底重装（如依赖目录损坏）：删掉 NAS 上 `backend/data/python` 目录和安装记录，重启后端自动重装：
+> `rm -rf backend/data/python backend/data/.requirements.sha256 && docker compose restart backend`
 
 ---
 
@@ -135,7 +137,6 @@ docker compose restart backend
 后端默认开启浏览器抓取用于小红书等登录墙页面。容器内要启用需额外装 chromium：
 
 ```bash
-docker compose exec backend pip install -r /app/requirements.txt
 docker compose exec backend playwright install chromium
 docker compose exec backend playwright install-deps
 docker compose restart backend
@@ -150,7 +151,9 @@ docker compose restart backend
 
 | 问题 | 解决 |
 |---|---|
-| 80 端口被群晖 Web Station / 其他服务占用 | 改 `docker-compose.yml` 里前端端口为 `8080:80`，浏览器访问 `:8080` |
+| 想换前端访问端口 | 改 `docker-compose.yml` 的端口映射和 `nginx.conf` 的 `listen`，**两者必须一致**（当前 `8005:8005`） |
+| 依赖装在哪？ | 群晖上 `backend/data/python` 目录（容器内 `/opt/pyuser`），直接可见、可备份 |
+| 想彻底重装依赖 | 删掉 NAS 上 `backend/data/python` 和安装记录，重启后端自动重装（见上文 requirements 一节） |
 | docker 命令权限不足 | 所有 `docker` 前加 `sudo`（update.sh 里改 `COMPOSE="sudo docker compose ..."`） |
 | 后端连不上 MariaDB | 确认 `backend/.env` 的 `DB_HOST` 是 MariaDB 所在机的局域网 IP，且该机防火墙放行端口 |
 | RAG/AI 摘要报连接错误 | 确认 Ollama 机器 `OLLAMA_HOST` 监听 `0.0.0.0`（默认 `127.0.0.1` 只允许本机），防火墙放行 11434 |

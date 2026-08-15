@@ -2,25 +2,25 @@
 # AI Kitchen Assistant —— 群晖 NAS 一键更新脚本
 #
 # 更新流程（贴合"镜像最小、代码挂载"的设计）：
-#   1. 拉取/同步最新代码到本目录的上级（仓库根目录）
+#   1. 拉取/同步最新代码到仓库根目录
 #   2. docker compose up -d 确保容器在运行
 #   3. 重启后端容器，让挂载的新代码生效（前端静态文件 nginx 自动读取，无需重启）
 #
-# 用法：在 deploy/ 目录下执行  bash update.sh
+# 用法：在仓库根目录下执行  bash deploy/update.sh
 #       若群晖 docker 需要 sudo：把下面 COMPOSE 变量改成 sudo docker compose ...
 set -e
-cd "$(dirname "$0")"
-COMPOSE="docker compose -f docker-compose.yml"
+cd "$(dirname "$0")/.."     # 切到仓库根目录（docker-compose.yml 所在处）
+COMPOSE="docker compose"
 
 echo "==================== AI Kitchen 更新 ===================="
 
 # 1. 拉取最新代码（NAS 上 git clone 过仓库时有效）
 #    如果你用 SMB/文件传输上传代码，这步会自动跳过
-if [ -d ../.git ]; then
+if [ -d .git ]; then
     echo ">> 拉取最新代码..."
-    git -C .. pull --ff-only || echo "   (git pull 失败，跳过 —— 可能用的是文件上传方式)"
+    git pull --ff-only || echo "   (git pull 失败，跳过 —— 可能用的是文件上传方式)"
 else
-    echo ">> 未检测到 git 仓库，跳过拉取（请确认代码已上传到本目录上级）"
+    echo ">> 未检测到 git 仓库，跳过拉取（请确认代码已上传到当前目录）"
 fi
 
 # 2. 确保容器按最新 compose 配置在运行

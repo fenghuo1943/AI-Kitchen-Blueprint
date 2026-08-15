@@ -15,14 +15,21 @@ services:
     # 代码挂载：后端整个目录映射进容器，改代码后重启容器即可生效
     volumes:
       - ./backend:/app
-      # 入口脚本：首次启动自动装依赖，正常重启不重复装（镜像保持干净）
+      # Python 依赖直接映射到群晖硬盘：pip --user 装进 NAS 目录，重建容器不重装
+      # 注意别映射到 /usr/local/lib/python3.13/site-packages（会盖住镜像自带 pip）
+      - ./backend/data/python:/opt/pyuser
+      # 入口脚本：requirements 变更时自动 pip install --user
       - ./backend-entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
-    # 仅启动命令；requirements.txt 有更新时按 setup.md 手动在容器内 pip install
+    # 仅启动命令；requirements.txt 有更新时重启容器即自动重装
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     environment:
       # 让 Python 日志实时输出，避免 docker logs 看不到
       - PYTHONUNBUFFERED=1
+      # Python 用户依赖装到 NAS 挂载目录（/opt/pyuser = backend/data/python）
+      - PYTHONUSERBASE=/opt/pyuser
+      # 让容器能找到 /opt/pyuser/bin 里的 uvicorn；$$PATH 转义，避免 compose 展开
+      - PATH=/opt/pyuser/bin:$$PATH
     ports:
       - "8001:8001"
     networks:
@@ -38,8 +45,8 @@ services:
       # nginx 配置：静态托管 + /api 反向代理到后端
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      # 若 80 端口被群晖 Web Station 占用，改成 8080:80
-      - "8005:80"
+      # 宿主端口:容器端口 —— 右边必须等于 nginx.conf 里的 listen（当前 8005）
+      - "8005:8005"
     networks:
       - kitchen
     depends_on:
@@ -47,5 +54,5 @@ services:
     restart: unless-stopped
 
 networks:
-	kitchen:
-		external: true
+  kitchen:
+    external: true

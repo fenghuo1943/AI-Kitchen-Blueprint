@@ -1,29 +1,49 @@
 #!/bin/bash
 # 后端容器入口脚本
 #
-# 设计：镜像只含基础 python，依赖在容器运行时安装。
-#   - 每次启动对比 requirements.txt 的内容哈希与上次安装记录：
-#       * 哈希不同（含首次启动、requirements 有更新）→ 自动 pip install，并更新记录
-#       * 哈希相同 → 跳过安装，快速启动
+# 设计：镜像只含基础 python，依赖通过 pip --user 装到 NAS 挂载目录
+#       /opt/pyuser（宿主机 backend/data/python），不占容器层。
+#   - 满足以下任一条件才重新安装：
+#       * requirements.txt 内容哈希与上次安装记录不同（首次启动 / requirements 有更新）
+#       * fastapi 导入失败（NAS 目录被删、换过基础镜像等自愈场景）
+#   - 其余情况（依赖已在 NAS 目录里）跳过安装，快速启动
 #   - 安装记录存在挂载目录 /app/data 下（gitignore 过的数据目录），容器重建也不会丢
+#
+# 注意：slim 基础镜像精简掉了 sha256sum/awk/cat 等工具，
+#       所有文件操作统一用 Python（镜像必有），其余只用 bash 内建命令。
 set -e
 
 REQ=/app/requirements.txt
 STAMP=/app/data/.requirements.sha256
 
-# 当前 requirements.txt 的哈希
-CURRENT=$(sha256sum "$REQ" | awk '{print $1}')
-# 上次安装成功时记录的哈希（首次启动时不存在）
-PREV=$(cat "$STAMP" 2>/dev/null || true)
+# 当前 requirements.txt 的 SHA-256（Python 计算，避免依赖 coreutils）
+CURRENT=$(python - "$REQ" <<'PYEOF'
+import hashlib, sys
+print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest())
+PYEOF
+)
 
-if [ "$CURRENT" != "$PREV" ]; then
-    echo ">> requirements.txt 有更新，正在安装/更新依赖（首次或变更后执行）..."
-    pip install --no-cache-dir -r "$REQ"
-    mkdir -p "$(dirname "$STAMP")"
-    echo "$CURRENT" > "$STAMP"
+# 上次安装成功时记录的哈希（首次启动时文件不存在，read 内建读取）
+PREV=""
+if [ -f "$STAMP" ]; then
+    read -r PREV < "$STAMP"
+    PREV="${PREV%$'\r'}"   # 去掉可能的 Windows 换行残留
+fi
+
+if [ "$CURRENT" != "$PREV" ] || ! python -c "import fastapi" 2>/dev/null; then
+    echo ">> 安装/更新后端依赖（requirements 变更或依赖缺失）..."
+    pip install --no-cache-dir --user -r "$REQ"
+    # 记录本次哈希（Python 建目录 + 写文件，避免依赖 mkdir/cat）
+    python - "$STAMP" "$CURRENT" <<'PYEOF'
+import os, sys
+path, content = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, 'w', encoding='utf-8') as f:
+    f.write(content + '\n')
+PYEOF
     echo ">> 依赖安装完成"
 else
-    echo ">> 依赖已是最新，跳过安装"
+    echo ">> 依赖已就绪（NAS 目录命中），跳过安装"
 fi
 
 exec "$@"
