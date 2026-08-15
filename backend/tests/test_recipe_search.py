@@ -210,6 +210,41 @@ class TestRecipeRecycleBin:
         assert client.get("/api/v1/recipes").json()["total"] == 0
         assert client.get("/api/v1/recipes", params={"deleted": "true"}).json()["total"] == 0
 
+    def test_hard_delete_with_ingestion_candidates(self, client: TestClient, household, db_session):
+        """彻底删除时存在 AI 采集候选外键引用（fk_candidate_recipe 无 ON DELETE CASCADE）不应报 1451"""
+        from app.db.models import Recipe, IngestionJob, IngestionCandidate
+        r = _mk_recipe(client, "西红柿牛腩").json()
+        client.delete(f"/api/v1/recipes/{r['id']}")  # 软删除进回收站
+
+        # 候选本体与补全目标都引用该菜谱
+        job = IngestionJob(
+            id=str(uuid.uuid4()),
+            status="queued",
+            stage="submitted",
+            job_type="ai_search",
+            request_text="西红柿",
+            collection_mode="complete",
+            target_recipe_id=r["id"],
+            max_results=5,
+        )
+        db_session.add(job)
+        db_session.add(IngestionCandidate(
+            id=str(uuid.uuid4()),
+            job_id=job.id,
+            recipe_id=r["id"],
+            target_recipe_id=r["id"],
+        ))
+        db_session.commit()
+
+        # 触发 FK 约束的彻底删除
+        assert client.delete(f"/api/v1/recipes/{r['id']}", params={"forever": "true"}).status_code == 204
+
+        # 菜谱与候选已清除，任务补全目标置空而非残留外键
+        assert db_session.query(Recipe).filter_by(id=r["id"]).count() == 0
+        assert db_session.query(IngestionCandidate).filter_by(recipe_id=r["id"]).count() == 0
+        db_session.refresh(job)
+        assert job.target_recipe_id is None
+
     def test_recycle_bin_searchable(self, client: TestClient, household):
         """测试回收站内仍可搜索"""
         r = _mk_recipe(client, "被删除的菜谱").json()

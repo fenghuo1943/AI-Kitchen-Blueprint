@@ -9,6 +9,7 @@ from app.db.models import (
     Recipe, Ingredient, RecipeIngredient, RecipeStep, RecipeTag, Tag,
     RecipeCategory, RecipeCategoryLink, RecipeSeasoning, Seasoning,
     Favorite, RecipeHistory, MealPlan,
+    IngestionCandidate, IngestionJob,
 )
 
 
@@ -259,6 +260,21 @@ class RecipeRepository:
         recipe = self.get_by_id_any(recipe_id)
         if not recipe:
             return False
+        # AI 采集关联表对 recipes(id) 未建 ON DELETE CASCADE，需显式清理：
+        # - 候选本体：本菜谱即 review 候选，删除候选行
+        # - 补全目标/任务结果：目标已被删除，置空避免外键残留
+        self.db.query(IngestionCandidate).filter(
+            IngestionCandidate.recipe_id == recipe_id
+        ).delete(synchronize_session=False)
+        self.db.query(IngestionCandidate).filter(
+            IngestionCandidate.target_recipe_id == recipe_id
+        ).update({IngestionCandidate.target_recipe_id: None}, synchronize_session=False)
+        self.db.query(IngestionJob).filter(
+            IngestionJob.result_recipe_id == recipe_id
+        ).update({IngestionJob.result_recipe_id: None}, synchronize_session=False)
+        self.db.query(IngestionJob).filter(
+            IngestionJob.target_recipe_id == recipe_id
+        ).update({IngestionJob.target_recipe_id: None}, synchronize_session=False)
         self.db.delete(recipe)
         self.db.commit()
         return True
