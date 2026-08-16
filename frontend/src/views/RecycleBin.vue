@@ -1,7 +1,7 @@
 <template>
   <div class="recycle-bin">
     <div class="header">
-      <button @click="$router.back()" class="btn btn-secondary btn-back">返回</button>
+      <button @click="$router.back()" class="btn-back">返回</button>
       <h1>回收站</h1>
     </div>
 
@@ -108,6 +108,22 @@ onMounted(() => {
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
 .btn-secondary { background: #f0f0f0; color: #333; }
 .btn-primary { background: #4a90d9; color: white; }
+.btn-back {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: #0784ff;
+  font-size: 14px;
+  font-weight: 500;
+}
+.btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 .btn-small { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
 .btn-confirm { background: #4a90d9; color: white; }
 .btn-danger { background: #f44336; color: white; }

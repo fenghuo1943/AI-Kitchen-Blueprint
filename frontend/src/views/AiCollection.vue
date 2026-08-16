@@ -1,6 +1,11 @@
 <template>
   <div class="ai-collect">
-    <h2 class="page-title">AI 采集入库</h2>
+    <div class="header">
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
+        <h1>AI 采集入库</h1>
+      </div>
+    </div>
 
     <!-- 配置横幅 -->
     <section v-if="config" class="card warn-banner" :class="{ ok: config.tavily_configured && config.llm_configured }">
@@ -232,9 +237,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { aiCollectApi, recipeApi } from '../services/api';
 import { toast } from '../composables/useToast';
+import { useGoBack } from '../composables/useGoBack';
 import type { AICollectCandidate, AICollectConfigStatus, AICollectJob, BrowserStatus, LLMModelOption, Recipe } from '../types';
 
 const router = useRouter();
+const { goBack } = useGoBack('/me');
 
 // 预设菜谱网站（name 为展示名，domain 传给 Tavily include_domains）
 const PRESET_SITES = [
@@ -668,7 +675,44 @@ onUnmounted(stopPolling);
 
 <style scoped>
 .ai-collect { padding: 20px; max-width: 900px; }
-.page-title { font-size: 1.3rem; margin: 0 0 16px; }
+.header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.header h1 { margin: 0; font-size: 1.3rem; }
+.btn-back {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: #0784ff;
+  font-size: 14px;
+  font-weight: 500;
+}
+.btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 
 .card {
   background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px;

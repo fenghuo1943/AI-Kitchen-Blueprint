@@ -2,12 +2,7 @@
   <div class="settings">
     <div class="header">
       <div class="header-left">
-        <button @click="goBack" class="btn-back" aria-label="返回">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </button>
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
         <h1>设置</h1>
       </div>
       <button @click="save" class="btn btn-primary" :disabled="saving">保存</button>
@@ -110,9 +105,10 @@ async function save() {
 .header h1 { margin: 0; font-size: 1.3rem; }
 
 .btn-back {
-  width: 36px; height: 36px; padding: 0;
+  height: 36px; padding: 0 12px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid #0784ff; border-radius: 8px; cursor: pointer; flex-shrink: 0;
+  color: #0784ff; font-size: 14px; font-weight: 500;
 }
 .btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 

@@ -1,11 +1,16 @@
 <template>
   <div class="recommend">
-    <h1>✨ 智能推荐</h1>
+    <div class="header">
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
+        <h1>智能推荐</h1>
+      </div>
+    </div>
     <p class="subtitle">根据您现有的食材，为您推荐合适的菜谱</p>
 
     <div class="recommend-form">
       <div class="form-section">
-        <h2>🥘 您的食材</h2>
+        <h2>您的食材</h2>
         <div class="ingredient-input">
           <input
             v-model="ingredientInput"
@@ -27,7 +32,7 @@
       </div>
 
       <div class="form-section">
-        <h2>⚙️ 筛选条件</h2>
+        <h2>筛选条件</h2>
         <div class="form-row">
           <div class="form-group">
             <label>当前季节</label>
@@ -90,7 +95,7 @@
     </div>
 
     <div v-if="recommendationResults.length > 0" class="results">
-      <h2>📋 推荐结果 ({{ recommendationResults.length }})</h2>
+      <h2>推荐结果 ({{ recommendationResults.length }})</h2>
       <div class="result-list">
         <div v-for="result in recommendationResults" :key="result.recipe_id" class="result-card">
           <div class="result-header">
@@ -133,7 +138,10 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
 import { recommendationApi } from '../services/api';
+import { useGoBack } from '../composables/useGoBack';
 import type { RecommendationResult } from '../types';
+
+const { goBack } = useGoBack('/me');
 
 const ingredientInput = ref('');
 const selectedIngredients = ref<string[]>([]);
@@ -206,16 +214,49 @@ async function getRecommendations() {
   margin: 0 auto;
 }
 
-h1 {
-  text-align: center;
-  color: #333;
-  margin-bottom: 8px;
+.header {
+  position: sticky;
+  top: var(--navbar-height, 64px);
+  z-index: 150;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  margin-bottom: 20px;
+  background: #f5f5f5;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.header h1 { margin: 0; font-size: 1.3rem; color: #333; }
+.btn-back {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #0784ff;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: #0784ff;
+  font-size: 14px;
+  font-weight: 500;
+}
+.btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 
 .subtitle {
-  text-align: center;
+  text-align: left;
   color: #666;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
 .recommend-form {
@@ -496,10 +537,6 @@ h1 {
 @media (max-width: 767px) {
   .recommend {
     padding: 16px;
-  }
-
-  h1 {
-    font-size: 1.5rem;
   }
 
   .subtitle {

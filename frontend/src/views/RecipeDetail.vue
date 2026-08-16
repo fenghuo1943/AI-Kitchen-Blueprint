@@ -2,12 +2,7 @@
   <div class="recipe-detail" v-if="recipe">
     <div class="header">
       <div class="header-left">
-        <button @click="goBack" class="btn-back" aria-label="返回">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </button>
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
         <h1 class="header-title">{{ recipe.title }}</h1>
       </div>
       <div class="actions">
@@ -248,11 +243,10 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* 返回按钮：向左箭头，蓝色轮廓，透明背景，圆角矩形外形 */
+/* 返回按钮：蓝色轮廓，透明背景，圆角矩形外形 */
 .btn-back {
-  width: 36px;
   height: 36px;
-  padding: 0;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -261,6 +255,9 @@ onMounted(() => {
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s;
+  color: #0784ff;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .btn-back:hover {

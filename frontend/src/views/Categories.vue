@@ -2,12 +2,7 @@
   <div class="categories">
     <div class="header">
       <div class="header-left">
-        <button @click="goBack" class="btn-back" aria-label="返回">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M19 12H6" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="M12 19L5 12L12 5" stroke="#0784ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </button>
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
         <h1>分类管理</h1>
       </div>
     </div>
@@ -126,9 +121,8 @@ onMounted(load);
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .header h1 { margin: 0; }
 .btn-back {
-  width: 36px;
   height: 36px;
-  padding: 0;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -137,6 +131,9 @@ onMounted(load);
   border-radius: 8px;
   cursor: pointer;
   flex-shrink: 0;
+  color: #0784ff;
+  font-size: 14px;
+  font-weight: 500;
 }
 .btn-back:hover { background: rgba(7, 132, 255, 0.08); }
 .type-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
