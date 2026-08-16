@@ -688,6 +688,7 @@ onMounted(() => {
     padding: 4px 8px;
     font-size: 11px;
     min-height: 28px;
+    width: 100%;
   }
 
   /* 移动端模态框 */
