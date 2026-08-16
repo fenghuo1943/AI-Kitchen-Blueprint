@@ -195,3 +195,22 @@ class TestRecipeRecycleBinAPI:
         data = resp.json()
         assert data["deleted_count"] == 1
         assert data["failed"] == []
+
+    def test_recycle_bin_contains_deleted_review_recipe(self, client):
+        """回归测试：软删除的 review 状态菜谱应在回收站可见"""
+        # 创建菜谱后改为 review 状态，再软删除
+        created = client.post("/api/v1/recipes", json={"title": "待审菜谱"}).json()
+        updated = client.patch(
+            f"/api/v1/recipes/{created['id']}",
+            json={"status": "review"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["status"] == "review"
+        assert client.delete(f"/api/v1/recipes/{created['id']}").status_code == 204
+
+        # 回收站应包含该 review 菜谱
+        assert created["id"] in self._deleted_ids(client)
+
+        # 正常列表（非回收站）仍不应展示 review 菜谱
+        normal_ids = [r["id"] for r in client.get("/api/v1/recipes").json()["data"]]
+        assert created["id"] not in normal_ids

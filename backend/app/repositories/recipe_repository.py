@@ -52,8 +52,9 @@ class RecipeRepository:
         conditions = [
             Recipe.deleted_at.isnot(None) if deleted else Recipe.deleted_at.is_(None)
         ]
-        # 默认列表不展示 review（AI 采集待审候选），确认入库（published）后才出现在菜谱库
-        if status is None:
+        # 默认列表不展示 review（AI 采集待审候选），确认入库（published）后才出现在菜谱库。
+        # 回收站不受此限制：软删的 review 菜谱也应在回收站可见，便于恢复/彻底删除
+        if status is None and not deleted:
             conditions.append(Recipe.status != "review")
 
         # 关键词：title / summary / 拼音前缀 / 分类名 / 食材名
