@@ -1,6 +1,6 @@
 """调料业务逻辑层"""
 import uuid
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from app.core.pinyin import to_pinyin
 from app.db.models import Seasoning
 from app.repositories.category_repository import get_default_category_id, resolve_category_id
 from app.repositories.seasoning_repository import SeasoningRepository
+from app.schemas.batch import BatchDeleteFailure, BatchDeleteResponse
 from app.schemas.seasoning import (
     SeasoningCreate, SeasoningUpdate, SeasoningResponse, SeasoningListResponse
 )
@@ -123,6 +124,29 @@ class SeasoningService:
                 f"该调料仍被 {len(recipes)} 个菜谱引用（{titles}），无法彻底删除"
             )
         return self.repository.hard_delete(seasoning_id)
+
+    def hard_delete_many(self, ids: List[str]) -> BatchDeleteResponse:
+        """批量彻底删除回收站中的调料（尽力而为：被菜谱引用的跳过并返回失败项）"""
+        ids = list(dict.fromkeys(ids))  # 去重，避免重复 id 重复计数
+        deleted_count = 0
+        failed: List[BatchDeleteFailure] = []
+        for seasoning_id in ids:
+            seasoning = self.repository.get_by_id_any(seasoning_id)
+            if not seasoning:
+                # 已不存在（如已被并发删除），视为已删除
+                deleted_count += 1
+                continue
+            recipes = self.repository.find_recipes_by_seasoning_any(seasoning_id)
+            if recipes:
+                failed.append(BatchDeleteFailure(
+                    id=seasoning_id,
+                    name=seasoning.canonical_name,
+                    reason=f"仍被 {len(recipes)} 个菜谱引用"
+                ))
+                continue
+            if self.repository.hard_delete(seasoning_id):
+                deleted_count += 1
+        return BatchDeleteResponse(deleted_count=deleted_count, failed=failed)
 
     def _to_response(self, seasoning: Seasoning) -> SeasoningResponse:
         return SeasoningResponse(

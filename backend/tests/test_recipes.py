@@ -159,3 +159,39 @@ class TestRecipesAPI:
         """测试发布不存在的菜谱"""
         response = client.post("/api/v1/recipes/nonexistent-id/publish")
         assert response.status_code == 404
+
+
+class TestRecipeRecycleBinAPI:
+    """菜谱回收站 API 测试类"""
+
+    def _create_and_soft_delete(self, client, title="回收站菜谱"):
+        """创建菜谱后软删除，返回 id"""
+        created = client.post("/api/v1/recipes", json={"title": title}).json()
+        assert client.delete(f"/api/v1/recipes/{created['id']}").status_code == 204
+        return created["id"]
+
+    def _deleted_ids(self, client):
+        return [r["id"] for r in client.get("/api/v1/recipes", params={"deleted": True}).json()["data"]]
+
+    def test_batch_hard_delete_recipes(self, client):
+        """测试批量彻底删除回收站菜谱"""
+        id1 = self._create_and_soft_delete(client, "批量删菜谱A")
+        id2 = self._create_and_soft_delete(client, "批量删菜谱B")
+
+        resp = client.post("/api/v1/recipes/batch-delete", json={"ids": [id1, id2]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 2
+        assert data["failed"] == []
+
+        deleted_ids = self._deleted_ids(client)
+        assert id1 not in deleted_ids
+        assert id2 not in deleted_ids
+
+    def test_batch_hard_delete_recipe_already_gone(self, client):
+        """批量删除中已不存在的 id 视为已删除"""
+        resp = client.post("/api/v1/recipes/batch-delete", json={"ids": ["nonexistent-id"]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 1
+        assert data["failed"] == []

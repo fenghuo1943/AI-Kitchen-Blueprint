@@ -249,3 +249,57 @@ class TestSeasoningRecycleBinAPI:
         resp = client.delete(f"/api/v1/seasonings/{seasoning.id}", params={"forever": True})
         assert resp.status_code == 409
         assert "引用" in resp.json()["detail"]
+
+    def test_batch_hard_delete_seasonings(self, client):
+        """测试批量彻底删除回收站调料"""
+        id1 = self._create_and_soft_delete(client, "批量删调料A")
+        id2 = self._create_and_soft_delete(client, "批量删调料B")
+
+        resp = client.post("/api/v1/seasonings/batch-delete", json={"ids": [id1, id2]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 2
+        assert data["failed"] == []
+
+        deleted_ids = self._deleted_ids(client)
+        assert id1 not in deleted_ids
+        assert id2 not in deleted_ids
+
+    def test_batch_hard_delete_seasoning_referenced_fails(self, client, db_session):
+        """批量删除时被菜谱引用的调料跳过并返回失败项"""
+        from app.db.models import Recipe, RecipeSeasoning, Seasoning
+        from datetime import datetime
+        import uuid
+
+        seasoning = Seasoning(id=str(uuid.uuid4()), canonical_name="回收站老抽")
+        db_session.add(seasoning)
+        recipe = Recipe(id=str(uuid.uuid4()), title="软删菜谱", status="published", deleted_at=datetime.utcnow())
+        db_session.add(recipe)
+        db_session.commit()
+        link = RecipeSeasoning(
+            id=str(uuid.uuid4()),
+            recipe_id=recipe.id,
+            seasoning_id=seasoning.id,
+        )
+        db_session.add(link)
+        db_session.commit()
+        db_session.connection().commit()
+
+        # 仅被软删菜谱引用 → 可先软删除入回收站
+        assert client.delete(f"/api/v1/seasonings/{seasoning.id}").status_code == 204
+
+        ok_id = self._create_and_soft_delete(client, "可删调料")
+        resp = client.post(
+            "/api/v1/seasonings/batch-delete",
+            json={"ids": [seasoning.id, ok_id]}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 1
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["id"] == seasoning.id
+        assert "菜谱引用" in data["failed"][0]["reason"]
+
+        deleted_ids = self._deleted_ids(client)
+        assert seasoning.id in deleted_ids  # 被拒项仍在回收站
+        assert ok_id not in deleted_ids

@@ -245,3 +245,52 @@ class TestIngredientRecycleBinAPI:
         resp = client.delete(f"/api/v1/ingredients/{sample_ingredient.id}", params={"forever": True})
         assert resp.status_code == 409
         assert "引用" in resp.json()["detail"]
+
+    def test_batch_hard_delete_ingredients(self, client):
+        """测试批量彻底删除回收站食材"""
+        id1 = self._create_and_soft_delete(client, "批量删食材A")
+        id2 = self._create_and_soft_delete(client, "批量删食材B")
+
+        resp = client.post("/api/v1/ingredients/batch-delete", json={"ids": [id1, id2]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 2
+        assert data["failed"] == []
+
+        deleted_ids = self._deleted_ids(client)
+        assert id1 not in deleted_ids
+        assert id2 not in deleted_ids
+
+    def test_batch_hard_delete_ingredient_referenced_fails(self, client, sample_ingredient, sample_recipe, db_session):
+        """批量删除时被菜谱引用的食材跳过并返回失败项"""
+        from datetime import datetime
+        sample_recipe.deleted_at = datetime.utcnow()
+        db_session.commit()
+        db_session.connection().commit()
+
+        # 仅被软删菜谱引用 → 可先软删除入回收站
+        assert client.delete(f"/api/v1/ingredients/{sample_ingredient.id}").status_code == 204
+
+        ok_id = self._create_and_soft_delete(client, "可删食材")
+        resp = client.post(
+            "/api/v1/ingredients/batch-delete",
+            json={"ids": [sample_ingredient.id, ok_id]}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 1
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["id"] == sample_ingredient.id
+        assert "菜谱引用" in data["failed"][0]["reason"]
+
+        deleted_ids = self._deleted_ids(client)
+        assert sample_ingredient.id in deleted_ids  # 被拒项仍在回收站
+        assert ok_id not in deleted_ids
+
+    def test_batch_hard_delete_ingredient_already_gone(self, client):
+        """批量删除中已不存在的 id 视为已删除"""
+        resp = client.post("/api/v1/ingredients/batch-delete", json={"ids": ["nonexistent-id"]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["deleted_count"] == 1
+        assert data["failed"] == []

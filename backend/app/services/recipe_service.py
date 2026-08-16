@@ -10,6 +10,7 @@ from app.repositories.category_repository import get_default_category_id, resolv
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.tasks.executor import enqueue_index, enqueue_delete
+from app.schemas.batch import BatchDeleteFailure, BatchDeleteResponse
 from app.schemas.recipe import (
     RecipeCreate, RecipeUpdate, RecipeResponse,
     RecipeListResponse, RecipeIngredientResponse, RecipeStepResponse,
@@ -186,6 +187,22 @@ class RecipeService:
         if ok:
             enqueue_delete(recipe_id)
         return ok
+
+    def hard_delete_many(self, ids: List[str]) -> BatchDeleteResponse:
+        """批量彻底删除回收站中的菜谱（尽力而为，逐条复用单删逻辑做级联清理）"""
+        ids = list(dict.fromkeys(ids))  # 去重，避免重复 id 重复计数
+        deleted_count = 0
+        failed: List[BatchDeleteFailure] = []
+        for recipe_id in ids:
+            recipe = self.recipe_repository.get_by_id_any(recipe_id)
+            if not recipe:
+                # 已不存在（如已被并发删除），视为已删除
+                deleted_count += 1
+                continue
+            if self.recipe_repository.hard_delete(recipe_id):
+                deleted_count += 1
+                enqueue_delete(recipe_id)
+        return BatchDeleteResponse(deleted_count=deleted_count, failed=failed)
 
     def restore_recipe(self, recipe_id: str) -> Optional[RecipeResponse]:
         """恢复软删除的菜谱"""

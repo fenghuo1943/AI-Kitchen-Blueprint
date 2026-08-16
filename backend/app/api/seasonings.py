@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.services.seasoning_service import SeasoningService
+from app.schemas.batch import BatchDeleteRequest, BatchDeleteResponse
 from app.schemas.seasoning import (
     SeasoningCreate, SeasoningUpdate, SeasoningResponse, SeasoningListResponse
 )
@@ -30,6 +31,15 @@ def list_seasonings(
     if deleted:
         return service.list_deleted(page=page, page_size=page_size)
     return service.search_seasonings(query=query, category_id=category_id, page=page, page_size=page_size)
+
+
+@router.post("/batch-delete", response_model=BatchDeleteResponse)
+def batch_delete_seasonings(
+    data: BatchDeleteRequest,
+    service: SeasoningService = Depends(get_seasoning_service)
+):
+    """批量彻底删除回收站中的调料（尽力而为：被菜谱引用的跳过并返回失败项）"""
+    return service.hard_delete_many(data.ids)
 
 
 @router.get("/all", response_model=SeasoningListResponse)

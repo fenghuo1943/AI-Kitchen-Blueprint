@@ -27,7 +27,8 @@ import type {
   LLMModelsResponse,
   BrowserStatus,
   BrowserFetch,
-  UserSettings
+  UserSettings,
+  BatchDeleteResult
 } from '../types';
 
 const api = axios.create({
@@ -66,6 +67,9 @@ export const ingredientApi = {
 
   restore: (id: string) =>
     api.post<any, Ingredient>(`/ingredients/${id}/restore`),
+
+  batchDelete: (ids: string[]) =>
+    api.post<any, BatchDeleteResult>('/ingredients/batch-delete', { ids }),
 
   addAlias: (id: string, aliasName: string) =>
     api.post(`/ingredients/${id}/aliases`, null, { params: { alias_name: aliasName } }),
@@ -110,7 +114,10 @@ export const seasoningApi = {
     api.delete(`/seasonings/${id}`, { params: { forever: forever || undefined } }),
 
   restore: (id: string) =>
-    api.post<any, Seasoning>(`/seasonings/${id}/restore`)
+    api.post<any, Seasoning>(`/seasonings/${id}/restore`),
+
+  batchDelete: (ids: string[]) =>
+    api.post<any, BatchDeleteResult>('/seasonings/batch-delete', { ids })
 };
 
 // 菜谱 API
@@ -139,7 +146,10 @@ export const recipeApi = {
     api.post<any, Recipe>(`/recipes/${id}/publish`),
 
   restore: (id: string) =>
-    api.post<any, Recipe>(`/recipes/${id}/restore`)
+    api.post<any, Recipe>(`/recipes/${id}/restore`),
+
+  batchDelete: (ids: string[]) =>
+    api.post<any, BatchDeleteResult>('/recipes/batch-delete', { ids })
 };
 
 // 库存 API

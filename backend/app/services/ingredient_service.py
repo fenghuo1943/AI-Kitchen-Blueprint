@@ -11,6 +11,7 @@ from app.core.pinyin import to_pinyin
 from app.db.models import Ingredient, IngredientAlias
 from app.repositories.category_repository import DEFAULT_CATEGORY_NAME, get_default_category_id, get_or_create_category_id
 from app.repositories.ingredient_repository import IngredientRepository
+from app.schemas.batch import BatchDeleteFailure, BatchDeleteResponse
 from app.schemas.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
     IngredientListResponse, IngredientSearchRequest
@@ -160,6 +161,37 @@ class IngredientService:
                 f"该食材仍被 {len(inventory)} 条库存记录引用，无法彻底删除"
             )
         return self.repository.hard_delete(ingredient_id)
+
+    def hard_delete_many(self, ids: List[str]) -> BatchDeleteResponse:
+        """批量彻底删除回收站中的食材（尽力而为：被菜谱/库存引用的跳过并返回失败项）"""
+        ids = list(dict.fromkeys(ids))  # 去重，避免重复 id 重复计数
+        deleted_count = 0
+        failed: List[BatchDeleteFailure] = []
+        for ingredient_id in ids:
+            ingredient = self.repository.get_by_id_any(ingredient_id)
+            if not ingredient:
+                # 已不存在（如已被并发删除），视为已删除
+                deleted_count += 1
+                continue
+            recipes = self.repository.find_recipes_by_ingredient_any(ingredient_id)
+            if recipes:
+                failed.append(BatchDeleteFailure(
+                    id=ingredient_id,
+                    name=ingredient.canonical_name,
+                    reason=f"仍被 {len(recipes)} 个菜谱引用"
+                ))
+                continue
+            inventory = self.repository.find_inventory_by_ingredient(ingredient_id)
+            if inventory:
+                failed.append(BatchDeleteFailure(
+                    id=ingredient_id,
+                    name=ingredient.canonical_name,
+                    reason=f"仍被 {len(inventory)} 条库存记录引用"
+                ))
+                continue
+            if self.repository.hard_delete(ingredient_id):
+                deleted_count += 1
+        return BatchDeleteResponse(deleted_count=deleted_count, failed=failed)
 
     def add_alias(self, ingredient_id: str, alias_name: str) -> Optional[IngredientAlias]:
         """添加别名"""

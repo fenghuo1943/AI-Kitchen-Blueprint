@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.repositories.ingredient_repository import IngredientRepository
 from app.services.ingredient_service import IngredientService
+from app.schemas.batch import BatchDeleteRequest, BatchDeleteResponse
 from app.schemas.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
     IngredientListResponse, IngredientSearchRequest
@@ -34,6 +35,15 @@ def list_ingredients(
         return service.list_deleted(page=page, page_size=page_size)
     request = IngredientSearchRequest(query=query, category_id=category_id)
     return service.search_ingredients(request, page=page, page_size=page_size)
+
+
+@router.post("/batch-delete", response_model=BatchDeleteResponse)
+def batch_delete_ingredients(
+    data: BatchDeleteRequest,
+    service: IngredientService = Depends(get_ingredient_service)
+):
+    """批量彻底删除回收站中的食材（尽力而为：被菜谱/库存引用的跳过并返回失败项）"""
+    return service.hard_delete_many(data.ids)
 
 
 @router.get("/{ingredient_id}", response_model=IngredientResponse)

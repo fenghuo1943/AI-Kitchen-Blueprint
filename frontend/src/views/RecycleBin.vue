@@ -16,6 +16,25 @@
       >{{ t.label }}</button>
     </div>
 
+    <div class="toolbar">
+      <template v-if="selecting">
+        <label class="select-all">
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+          <span>全选</span>
+        </label>
+        <span class="selected-count">已选 {{ selectedIds.size }} 项</span>
+        <div class="toolbar-actions">
+          <button
+            class="btn btn-danger"
+            :disabled="!selectedIds.size"
+            @click="batchHardDelete"
+          >批量彻底删除</button>
+          <button class="btn btn-secondary" @click="exitSelect">取消</button>
+        </div>
+      </template>
+      <button v-else class="btn btn-secondary" :disabled="!items.length" @click="enterSelect">批量删除</button>
+    </div>
+
     <div v-if="loading && !items.length" class="empty-state">
       <span class="spinner" aria-hidden="true"></span>
       <p>加载中...</p>
@@ -26,12 +45,19 @@
     </div>
     <div v-else-if="items.length" class="list">
       <div v-for="row in items" :key="row.id" class="list-row">
+        <input
+          v-if="selecting"
+          type="checkbox"
+          class="row-checkbox"
+          :checked="selectedIds.has(row.id)"
+          @change="toggleSelect(row.id)"
+        />
         <div class="row-main">
           <span class="row-title">{{ rowName(row) }}</span>
           <span v-if="rowSub(row)" class="row-sub">{{ rowSub(row) }}</span>
           <span v-if="row.deleted_at" class="row-time">删除于 {{ formatTime(row.deleted_at) }}</span>
         </div>
-        <div class="row-actions">
+        <div v-if="!selecting" class="row-actions">
           <button class="btn-small btn-confirm" @click="restore(row.id)">恢复</button>
           <button class="btn-small btn-danger" @click="hardDelete(row.id)">彻底删除</button>
         </div>
@@ -50,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { recipeApi, ingredientApi, seasoningApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import { useGoBack } from '../composables/useGoBack';
@@ -95,6 +121,37 @@ const {
   getPageSize: () => pageSize.value
 });
 
+// ---- 批量删除（多选模式）----
+const selecting = ref(false);
+const selectedIds = reactive(new Set<string>());
+const allSelected = computed(() =>
+  items.value.length > 0 && items.value.every(row => selectedIds.has(row.id))
+);
+
+function enterSelect() {
+  if (!items.value.length) return;
+  selecting.value = true;
+  selectedIds.clear();
+}
+
+function exitSelect() {
+  selecting.value = false;
+  selectedIds.clear();
+}
+
+function toggleSelect(id: string) {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.clear();
+  } else {
+    items.value.forEach(row => selectedIds.add(row.id));
+  }
+}
+
 function rowName(row: RecycleItem) {
   return 'title' in row ? row.title : row.canonical_name;
 }
@@ -109,6 +166,7 @@ function formatTime(t: string) {
 
 function switchTab(type: RecycleType) {
   if (activeType.value === type) return;
+  exitSelect();
   activeType.value = type;
   // 切换标签清空旧数据，避免上一标签的列表短暂残留
   items.value = [];
@@ -147,6 +205,36 @@ async function hardDelete(id: string) {
   } catch (e: any) {
     console.error('hard delete failed', e);
     toast(e?.response?.data?.detail || '删除失败', 'error');
+  }
+}
+
+async function batchHardDelete() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!window.confirm(`确定彻底删除选中的 ${ids.length} 项？此操作不可恢复。`)) return;
+
+  try {
+    let result;
+    if (activeType.value === 'recipe') {
+      result = await recipeApi.batchDelete(ids);
+    } else if (activeType.value === 'ingredient') {
+      result = await ingredientApi.batchDelete(ids);
+    } else {
+      result = await seasoningApi.batchDelete(ids);
+    }
+    const failed = result.failed || [];
+    if (failed.length) {
+      const names = failed.slice(0, 3).map(f => `${f.name}（${f.reason}）`).join('、');
+      const more = failed.length > 3 ? ` 等 ${failed.length} 项` : '';
+      toast(`已彻底删除 ${result.deleted_count} 项，${failed.length} 项无法删除：${names}${more}`, 'error');
+    } else {
+      toast(`已彻底删除 ${ids.length} 项`);
+    }
+    exitSelect();
+    load();
+  } catch (e: any) {
+    console.error('batch delete failed', e);
+    toast(e?.response?.data?.detail || '批量删除失败', 'error');
   }
 }
 
@@ -189,11 +277,18 @@ onMounted(() => {
 }
 .tab-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
 
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.select-all { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #333; cursor: pointer; }
+.select-all input { width: 18px; height: 18px; }
+.selected-count { font-size: 14px; color: #666; }
+.toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
+
 .list { background: white; border-radius: 12px; overflow: hidden; }
 .list-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 16px; border-bottom: 1px solid #f0f0f0; gap: 12px;
 }
+.row-checkbox { width: 18px; height: 18px; flex-shrink: 0; }
 .row-main { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .row-title { font-weight: 500; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 12px; color: #4a90d9; }
@@ -201,6 +296,7 @@ onMounted(() => {
 .row-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary { background: #f0f0f0; color: #333; }
 .btn-primary { background: #4a90d9; color: white; }
 .btn-small { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
@@ -224,6 +320,8 @@ onMounted(() => {
   .btn-back { position: absolute; left: 0; }
   .type-tabs { width: 100%; }
   .tab-btn { flex: 1; padding: 10px 4px; }
+  .toolbar-actions { margin-left: 0; width: 100%; }
+  .toolbar-actions .btn { flex: 1; }
   .list-row { flex-direction: row; align-items: center; gap: 8px; }
   .row-actions { flex-direction: column; align-items: stretch; gap: 6px; }
   .row-actions .btn-small { min-height: 32px; padding: 6px 12px; }

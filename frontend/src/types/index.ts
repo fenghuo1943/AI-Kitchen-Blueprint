@@ -395,6 +395,18 @@ export interface PaginatedResponse<T> {
   page_size: number;
 }
 
+// 批量删除（回收站）
+export interface BatchDeleteFailure {
+  id: string;
+  name: string;
+  reason: string;
+}
+
+export interface BatchDeleteResult {
+  deleted_count: number;
+  failed: BatchDeleteFailure[];
+}
+
 // 用户/家庭设置
 export interface UserSettings {
   page_size_desktop: number;

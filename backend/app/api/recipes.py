@@ -8,6 +8,7 @@ from app.db.database import get_db
 from app.repositories.recipe_repository import RecipeRepository
 from app.repositories.ingredient_repository import IngredientRepository
 from app.services.recipe_service import RecipeService
+from app.schemas.batch import BatchDeleteRequest, BatchDeleteResponse
 from app.schemas.recipe import (
     RecipeCreate, RecipeUpdate, RecipeResponse,
     RecipeListResponse
@@ -62,6 +63,15 @@ def list_recipes(
         page=page,
         page_size=page_size
     )
+
+
+@router.post("/batch-delete", response_model=BatchDeleteResponse)
+def batch_delete_recipes(
+    data: BatchDeleteRequest,
+    service: RecipeService = Depends(get_recipe_service)
+):
+    """批量彻底删除回收站中的菜谱"""
+    return service.hard_delete_many(data.ids)
 
 
 @router.get("/{recipe_id}", response_model=RecipeResponse)
