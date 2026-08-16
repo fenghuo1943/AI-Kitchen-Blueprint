@@ -33,14 +33,16 @@
       <div v-for="ing in ingredients" :key="ing.id" class="ingredient-card">
         <div class="card-main" @click="editIngredient(ing)">
           <div class="ingredient-header">
-            <h3>{{ ing.canonical_name }}</h3>
-            <span class="category-badge">{{ ing.category_name || '未分类' }}</span>
+            <div class="ingredient-title">
+              <h3>{{ ing.canonical_name }}</h3>
+              <span class="category-badge">{{ ing.category_name || '未分类' }}</span>
+            </div>
+            <div class="ingredient-actions">
+              <button @click.stop="openAliasEditor(ing)" class="btn btn-small btn-primary">编辑别名</button>
+              <button @click.stop="deleteIngredient(ing.id)" class="btn btn-small btn-danger">删除</button>
+            </div>
           </div>
           <div class="ingredient-details">
-            <div class="detail-item" v-if="ing.pinyin">
-              <span class="label">拼音:</span>
-              <span>{{ ing.pinyin }}</span>
-            </div>
             <div v-if="ing.season_months && ing.season_months.length > 0" class="detail-item">
               <span class="label">应季月份:</span>
               <span>{{ ing.season_months.join(', ') }}月</span>
@@ -54,10 +56,6 @@
               <span>{{ ing.aliases.map(a => a.alias).join(', ') }}</span>
             </div>
           </div>
-        </div>
-        <div class="ingredient-actions">
-          <button @click="openAliasEditor(ing)" class="btn btn-small btn-primary">编辑别名</button>
-          <button @click="deleteIngredient(ing.id)" class="btn btn-small btn-danger">删除</button>
         </div>
       </div>
     </div>
@@ -386,8 +384,6 @@ onMounted(() => {
 }
 
 .ingredient-card {
-  display: flex;
-  gap: 12px;
   background: white;
   border-radius: 12px;
   padding: 16px;
@@ -395,8 +391,6 @@ onMounted(() => {
 }
 
 .card-main {
-  flex: 1;
-  min-width: 0;
   cursor: pointer;
 }
 
@@ -408,13 +402,23 @@ onMounted(() => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.ingredient-header h3 {
+.ingredient-title {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ingredient-title h3 {
   margin: 0;
   color: #333;
+  line-height: 1.3;
 }
 
 .category-badge {
@@ -423,10 +427,13 @@ onMounted(() => {
   border-radius: 12px;
   font-size: 12px;
   color: #666;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 
 .ingredient-details {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .detail-item {
@@ -481,9 +488,11 @@ onMounted(() => {
 .ingredient-actions {
   display: flex;
   flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
-  align-items: center;
+  margin-left: auto;
 }
 
 .ingredient-actions .btn-small {
@@ -671,30 +680,28 @@ onMounted(() => {
 
   .ingredient-card {
     padding: 12px;
-    gap: 8px;
   }
 
   .ingredient-header {
-    flex-direction: column;
-    align-items: flex-start;
     gap: 8px;
   }
 
-  .ingredient-header h3 {
+  .ingredient-title {
+    gap: 6px;
+  }
+
+  .ingredient-title h3 {
     font-size: 1.1rem;
   }
 
   .ingredient-actions {
-    flex-direction: column;
     gap: 6px;
-    align-items: flex-start;
   }
 
   .ingredient-actions .btn-small {
-    padding: 4px 8px;
+    padding: 4px 10px;
     font-size: 11px;
     min-height: 28px;
-    width: 100%;
   }
 
   /* 移动端模态框 */
@@ -725,7 +732,7 @@ onMounted(() => {
     gap: 6px;
   }
 
-  .ingredient-actions .btn {
+  .ingredient-actions .btn-small {
     padding: 6px 10px;
     font-size: 11px;
   }
