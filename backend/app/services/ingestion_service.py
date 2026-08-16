@@ -9,7 +9,7 @@ from app.db.models import (
     IngestionJob, RecipeSource, Recipe, RecipeCategoryLink,
     RecipeIngredient, RecipeStep,
 )
-from app.core.category_classifier import classify_ingredient, classify_recipe
+from app.core.category_classifier import classify_ingredient, resolve_recipe_category
 from app.repositories.category_repository import resolve_category_id
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -136,13 +136,13 @@ class IngestionService:
             )
             recipe = self.ingestion_repository.create_recipe(recipe)
 
-            # 菜谱按标题自动分类（入库规则；未识别回落默认）
+            # 菜谱自动分类：显式 category 优先，否则按标题规则（未识别回落默认）
             self.ingestion_repository.db.add(RecipeCategoryLink(
                 id=str(uuid.uuid4()),
                 recipe_id=recipe.id,
                 category_id=resolve_category_id(
                     self.ingestion_repository.db, "recipe",
-                    name=classify_recipe(recipe_data.title),
+                    name=resolve_recipe_category(recipe_data.title, recipe_data.category),
                 ),
             ))
 

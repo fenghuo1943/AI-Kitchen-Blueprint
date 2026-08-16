@@ -1281,6 +1281,38 @@ def test_persist_candidate_unknown_ingredient_falls_back_default(db_session, no_
     assert ing.category_id == get_default_category_id(db_session, "ingredient")
 
 
+def test_persist_candidate_explicit_category_wins(db_session, no_enqueue, tavily_key):
+    """结构化 JSON 显式 category（规范清单内）优先于标题规则。"""
+    job = make_job(db_session)
+    recipe = make_recipe(title="红烧肉")  # 标题规则会给 炖菜
+    recipe["category"] = "汤羹"
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
+    assert db_session.query(RecipeCategory).get(link.category_id).name == "汤羹"
+
+
+def test_persist_candidate_invalid_category_falls_back_title(db_session, no_enqueue, tavily_key):
+    """显式 category 不在规范清单内 → 回落标题规则，不落成新分类。"""
+    job = make_job(db_session)
+    recipe = make_recipe(title="红烧肉")
+    recipe["category"] = "烫羹"  # 拼错的分类名
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
+    assert db_session.query(RecipeCategory).get(link.category_id).name == "炖菜"
+
+
 def test_approve_merge_merges_seasonings(db_session, no_enqueue, tavily_key):
     """补全模式合入时，候选的调料也并入目标（按名去重）。"""
     target = Recipe(id=str(uuid.uuid4()), title="西红柿炒鸡蛋", status="draft", revision=1)

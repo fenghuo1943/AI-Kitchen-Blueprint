@@ -19,7 +19,9 @@ from urllib.parse import unquote, urlparse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.category_classifier import classify_ingredient, classify_recipe, classify_seasoning
+from app.core.category_classifier import (
+    classify_ingredient, classify_seasoning, resolve_recipe_category,
+)
 from app.core.config import settings
 from app.core.pinyin import to_pinyin
 from app.db.database import get_db_context
@@ -618,11 +620,14 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
-        # 采集菜谱按标题自动分类（入库规则；未识别回落默认）
+        # 采集菜谱自动分类：显式 category（结构化 JSON 提供）优先，否则按标题规则（未识别回落默认）
         db.add(RecipeCategoryLink(
             id=str(uuid.uuid4()),
             recipe_id=cand_recipe.id,
-            category_id=resolve_category_id(db, "recipe", name=classify_recipe(recipe["title"])),
+            category_id=resolve_category_id(
+                db, "recipe",
+                name=resolve_recipe_category(recipe["title"], recipe.get("category")),
+            ),
         ))
 
         # 调料兜底：静态词典未覆盖、但调料表中已维护的名字（用户手工新增的调料）→ 拆到调料

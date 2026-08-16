@@ -395,6 +395,7 @@ const isStructured = computed(() =>
 const SAMPLE_RECIPE_JSON = JSON.stringify({
   title: '西红柿炒鸡蛋',
   summary: '经典家常菜',
+  category: '家常菜',
   servings: 2,
   prep_minutes: 5,
   cook_minutes: 10,

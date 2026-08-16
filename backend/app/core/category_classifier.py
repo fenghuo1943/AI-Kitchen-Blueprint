@@ -357,3 +357,17 @@ def classify_recipe(title: str, ingredient_names: Optional[List[str]] = None) ->
     if category is not None:
         return category
     return "家常菜"
+
+
+def resolve_recipe_category(title: str, explicit: Optional[str] = None) -> str:
+    """菜谱归类统一入口：显式 category（JSON 直入提供）优先，否则按标题规则。
+
+    explicit 必须落在规范菜谱分类清单（RECIPE_CATEGORIES）内才被采用，
+    否则视为不可信输入回落标题规则——防止拼写错误/非法值被落成新分类。
+    显式值转 str 再比对，兼容 JSON 里 category 为数字/布尔等非字符串的情况。
+    """
+    if explicit:
+        name = str(explicit or "").strip()
+        if name in RECIPE_CATEGORIES:
+            return name
+    return classify_recipe(title)

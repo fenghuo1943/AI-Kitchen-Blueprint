@@ -7,6 +7,7 @@ import pytest
 
 from app.core.category_classifier import (
     classify_ingredient, classify_seasoning, classify_recipe,
+    resolve_recipe_category,
 )
 
 
@@ -128,6 +129,30 @@ def test_recipe_noodle_beats_soup():
 def test_recipe_dessert_beats_quick():
     """「简单快手蛋糕」→ 甜点（同长关键词时表序靠前优先），而非快手菜。"""
     assert classify_recipe("简单快手蛋糕") == "甜点"
+
+
+# ============================================================
+# 显式 category 优先（JSON 直入）
+# ============================================================
+@pytest.mark.parametrize("title,explicit,expected", [
+    # 显式分类在规范清单内 → 直接采用
+    ("红烧肉", "汤羹", "汤羹"),
+    ("红烧肉", "默认", "默认"),
+    (" 甜点 ", "甜点", "甜点"),   # 显式分类会 normalize
+    ("红烧肉", 5, "炖菜"),        # 非字符串显式值不崩溃 → 回落标题规则
+    ("红烧肉", True, "炖菜"),     # 布尔值同样安全回落
+    # 显式分类非法/拼错 → 回落标题规则
+    ("红烧肉", "烫羹", "炖菜"),   # 非法分类 → 按标题 红烧→炖菜
+    ("番茄炒蛋", "汤类", "家常菜"),
+    ("西红柿炒鸡蛋", "", "家常菜"),  # 空显式 → 标题规则
+])
+def test_resolve_recipe_category(title, explicit, expected):
+    assert resolve_recipe_category(title, explicit) == expected
+
+
+def test_resolve_recipe_category_none_explicit():
+    """显式分类缺省时完全等价于标题规则。"""
+    assert resolve_recipe_category("凉拌黄瓜", None) == classify_recipe("凉拌黄瓜")
 
 
 def test_seasoning_exclude_guard():

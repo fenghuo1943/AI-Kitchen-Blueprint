@@ -12,6 +12,7 @@ class IngestionRecipeData(BaseModel):
     prep_minutes: Optional[int] = Field(None, description="准备时间")
     cook_minutes: Optional[int] = Field(None, description="烹饪时间")
     difficulty: Optional[str] = Field(None, description="难度")
+    category: Optional[str] = Field(None, description="菜谱分类（须在规范分类清单内，否则按标题自动分类）")
     ingredients: List[dict] = Field(default_factory=list, description="食材列表")
     steps: List[dict] = Field(default_factory=list, description="步骤列表")
     tags: List[str] = Field(default_factory=list, description="标签列表")
