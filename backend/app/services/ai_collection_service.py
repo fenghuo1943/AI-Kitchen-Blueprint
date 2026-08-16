@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.category_classifier import (
-    classify_ingredient, classify_seasoning, resolve_recipe_category,
+    classify_ingredient, classify_seasoning, resolve_recipe_categories,
 )
 from app.core.config import settings
 from app.core.pinyin import to_pinyin
@@ -620,15 +620,17 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
-        # 采集菜谱自动分类：显式 category（结构化 JSON 提供）优先，新分类名自动创建；否则按标题规则（回落默认）
-        db.add(RecipeCategoryLink(
-            id=str(uuid.uuid4()),
-            recipe_id=cand_recipe.id,
-            category_id=resolve_category_id(
-                db, "recipe",
-                name=resolve_recipe_category(recipe["title"], recipe.get("category")),
-            ),
-        ))
+        # 采集菜谱自动分类：显式 category（字符串或数组，结构化 JSON 提供）优先，
+        # 新分类名自动创建；未提供时按标题规则；另据主食材推导「蔬菜/肉类」并入。
+        ingredient_names = [ing.get("name") for ing in recipe.get("ingredients", [])]
+        for cat_name in resolve_recipe_categories(
+            recipe["title"], recipe.get("category"), ingredient_names,
+        ):
+            db.add(RecipeCategoryLink(
+                id=str(uuid.uuid4()),
+                recipe_id=cand_recipe.id,
+                category_id=resolve_category_id(db, "recipe", name=cat_name),
+            ))
 
         # 调料兜底：静态词典未覆盖、但调料表中已维护的名字（用户手工新增的调料）→ 拆到调料
         seasoning_repo = SeasoningRepository(db)

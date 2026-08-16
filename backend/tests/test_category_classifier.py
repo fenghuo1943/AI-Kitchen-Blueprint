@@ -7,7 +7,7 @@ import pytest
 
 from app.core.category_classifier import (
     classify_ingredient, classify_seasoning, classify_recipe,
-    resolve_recipe_category,
+    resolve_recipe_categories, resolve_recipe_category,
 )
 
 
@@ -156,6 +156,52 @@ def test_resolve_recipe_category(title, explicit, expected):
 def test_resolve_recipe_category_none_explicit():
     """显式分类缺省时完全等价于标题规则。"""
     assert resolve_recipe_category("凉拌黄瓜", None) == classify_recipe("凉拌黄瓜")
+
+
+# ============================================================
+# 多分类解析（resolve_recipe_categories）
+# ============================================================
+def test_resolve_categories_string_explicit():
+    """字符串显式分类 → 单元素列表（行为与单分类一致）。"""
+    assert resolve_recipe_categories("红烧肉", "汤羹") == ["汤羹"]
+
+
+def test_resolve_categories_array_explicit():
+    """数组显式分类 → 逐项清洗保留，去重保序。"""
+    assert resolve_recipe_categories("红烧肉", ["炖菜", "家常菜", "炖菜"]) == ["炖菜", "家常菜"]
+
+
+def test_resolve_categories_invalid_explicit_falls_back_title():
+    """空/非字符串/超长等不可信显式输入 → 回落标题规则。"""
+    assert resolve_recipe_categories("红烧肉", "") == ["炖菜"]
+    assert resolve_recipe_categories("红烧肉", 5) == ["炖菜"]
+    assert resolve_recipe_categories("红烧肉", ["炖菜", 5, "  "]) == ["炖菜"]
+    assert resolve_recipe_categories("红烧肉", ["超" * 30]) == ["炖菜"]
+
+
+def test_resolve_categories_derives_vegetable_from_ingredients():
+    """主食材含蔬菜（西红柿）→ 自动补挂「蔬菜」；无显式分类时与标题分类并存。"""
+    assert resolve_recipe_categories(
+        "西红柿炒鸡蛋", None, ["西红柿", "鸡蛋"]) == ["家常菜", "蔬菜"]
+
+
+def test_resolve_categories_derives_meat_from_ingredients():
+    """主食材含肉类（五花肉）→ 自动补挂「肉类」。"""
+    assert resolve_recipe_categories("红烧肉", None, ["五花肉", "冰糖"]) == ["炖菜", "肉类"]
+
+
+def test_resolve_categories_derivation_dedupes_with_explicit():
+    """显式分类已含「蔬菜」时，食材推导不再重复挂。"""
+    assert resolve_recipe_categories(
+        "西红柿炒鸡蛋", ["蔬菜"], ["西红柿"]) == ["蔬菜"]
+
+
+def test_resolve_categories_derivation_ignores_seasonings_and_others():
+    """调料/海鲜等不触发 蔬菜/肉类 推导。"""
+    assert resolve_recipe_categories(
+        "红烧肉", ["炖菜"], ["五花肉", "盐", "酱油"]) == ["炖菜", "肉类"]
+    assert resolve_recipe_categories(
+        "清蒸鲈鱼", None, ["鲈鱼", "葱", "姜"]) == ["家常菜"]  # 海鲜水产 不推导
 
 
 def test_seasoning_exclude_guard():

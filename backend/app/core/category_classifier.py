@@ -24,7 +24,8 @@ SEASONING_CATEGORIES = (
     "基础调味", "酱料", "去腥增香", "辣味调料", "香辛料", "粉末调料", "油脂", "默认",
 )
 RECIPE_CATEGORIES = (
-    "家常菜", "快手菜", "汤羹", "凉菜", "面食", "炖菜", "减脂餐", "甜点", "默认",
+    "家常菜", "快手菜", "汤羹", "凉菜", "面食", "炖菜", "减脂餐", "甜点",
+    "蔬菜", "肉类", "默认",
 )
 CATEGORY_LISTS: dict[str, Tuple[str, ...]] = {
     "ingredient": INGREDIENT_CATEGORIES,
@@ -376,14 +377,44 @@ def _sanitize_category(category) -> str:
     return name
 
 
-def resolve_recipe_category(title: str, explicit: Optional[str] = None) -> str:
-    """菜谱归类统一入口：显式 category（JSON 直入提供）优先，否则按标题规则。
+def resolve_recipe_categories(
+    title: str,
+    explicit=None,
+    ingredient_names: Optional[List[str]] = None,
+) -> List[str]:
+    """菜谱多分类解析：显式 category（字符串或字符串数组）优先，逐个清洗去重；
+    未提供有效显式分类时按标题规则归类；另据主食材推导「蔬菜/肉类」并入
+    （蔬菜/肉类 为主食材分类，菜谱若以蔬菜/肉为主料应一并挂上）。
 
-    显式分类仅做基本清洗（字符串类型、去首尾/折叠空白、长度上限）后即采用——
-    DB 未收录的新分类名由调用方 resolve_category_id 自动创建（允许 AI 新增分类）；
-    空/非字符串/超长等不可信输入回落标题规则。
+    explicit 兼容结构化 JSON 的单分类字符串与多分类数组；DB 未收录的新分类名
+    由调用方 resolve_category_id 自动创建；空/非字符串等不可信输入回落标题规则。
+    返回非空列表（兜底「家常菜」）。
     """
-    name = _sanitize_category(explicit)
-    if name:
-        return name
-    return classify_recipe(title)
+    if isinstance(explicit, str):
+        candidates = [explicit]
+    elif isinstance(explicit, (list, tuple)):
+        candidates = [c for c in explicit if isinstance(c, str)]
+    else:
+        candidates = []
+    names: List[str] = []
+    for raw in candidates:
+        name = _sanitize_category(raw)
+        if name and name not in names:
+            names.append(name)
+    if not names:
+        names.append(classify_recipe(title))
+    # 按主食材推导 蔬菜/肉类（去重并入；classify_ingredient 已过滤调料，不会误伤）
+    for ing_name in ingredient_names or []:
+        cat = classify_ingredient(ing_name)
+        if cat in ("蔬菜", "肉类") and cat not in names:
+            names.append(cat)
+    return names or ["家常菜"]
+
+
+def resolve_recipe_category(title: str, explicit: Optional[str] = None) -> str:
+    """菜谱单分类统一入口（向后兼容）：显式 category（JSON 直入提供）优先，否则按标题规则。
+
+    即 resolve_recipe_categories 的首个分类——不传食材、不做「蔬菜/肉类」推导，
+    行为与旧版完全一致，供单分类调用方（如 reclassify 脚本）使用。
+    """
+    return resolve_recipe_categories(title, explicit)[0]

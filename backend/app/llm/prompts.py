@@ -40,7 +40,7 @@ class RecipeExtraction(BaseModel):
     cook_minutes: Optional[int] = Field(None, description="烹饪时间(分钟)")
     difficulty: Optional[str] = Field(None, description="难度：简单/中等/困难")
     category: Optional[str] = Field(
-        None, description="菜谱分类，从推荐分类中选择（家常菜/快手菜/汤羹/凉菜/面食/炖菜/减脂餐/甜点）；都不合适可给新分类名"
+        None, description="菜谱分类，从推荐分类中选择（家常菜/快手菜/汤羹/凉菜/面食/炖菜/减脂餐/甜点/蔬菜/肉类）；都不合适可给新分类名"
     )
     ingredients: List[RecipeIngredientExtract] = Field(default_factory=list, description="食材列表（不含调料）")
     seasonings: List[RecipeIngredientExtract] = Field(
@@ -60,8 +60,9 @@ SYSTEM_EXTRACTION_PROMPT = (
     "只针对'食谱、烹饪'主题抽取；素材不含菜谱时输出 {\"title\": \"\"}。\n"
     "分类规则：盐/糖/酱油/料酒/醋/葱姜蒜/花椒/八角/淀粉 等'调料、香料、"
     "调味酱汁'放到 seasonings 字段；其余'主料、配菜、肉类、蔬菜'放到 ingredients 字段。\n"
-    "分类规则：category 字段从 家常菜/快手菜/汤羹/凉菜/面食/炖菜/减脂餐/甜点 中选择最贴切的一个；"
-    "都不合适可给一个新的分类名（短词），不要漏掉该字段。\n"
+    "分类规则：category 字段从 家常菜/快手菜/汤羹/凉菜/面食/炖菜/减脂餐/甜点/蔬菜/肉类 "
+    "中选择最贴切的一个；都不合适可给一个新的分类名（短词），不要漏掉该字段。"
+    "蔬菜/肉类等主食材分类由后端按食材自动补挂，无需重复。\n"
     "输出示例：\n"
     '{"title":"西红柿炒鸡蛋","summary":"经典家常菜","category":"家常菜","servings":2,"prep_minutes":5,'
     '"cook_minutes":10,"difficulty":"简单",'

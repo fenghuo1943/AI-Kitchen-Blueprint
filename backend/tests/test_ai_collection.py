@@ -151,6 +151,16 @@ def make_job(db, mode="topic", request_text="西红柿", target_id=None):
     return job
 
 
+def _recipe_category_names(db, recipe_id):
+    """取某菜谱已挂的全部分类名（排序后比较，多分类断言用）。"""
+    names = []
+    for link in db.query(RecipeCategoryLink).filter_by(recipe_id=recipe_id).all():
+        cat = db.query(RecipeCategory).get(link.category_id)
+        if cat:
+            names.append(cat.name)
+    return sorted(names)
+
+
 @pytest.fixture
 def no_enqueue(monkeypatch):
     """屏蔽采集/索引后台任务（单连接 SQLite 不能开线程）。"""
@@ -1247,10 +1257,8 @@ def test_persist_candidate_auto_classifies(db_session, no_enqueue, tavily_key):
 
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
 
-    # 菜谱：西红柿炒鸡蛋 → 家常菜
-    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
-    rcat = db_session.query(RecipeCategory).get(link.category_id)
-    assert rcat.name == "家常菜"
+    # 菜谱：西红柿炒鸡蛋 → 家常菜 + 主食材西红柿 自动补挂 蔬菜
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["家常菜", "蔬菜"]
 
     # 食材：西红柿 → 蔬菜，鸡蛋 → 蛋类
     tomato = db_session.query(Ingredient).filter_by(canonical_name="西红柿").first()
@@ -1293,8 +1301,8 @@ def test_persist_candidate_explicit_category_wins(db_session, no_enqueue, tavily
     db_session.commit()
 
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
-    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
-    assert db_session.query(RecipeCategory).get(link.category_id).name == "汤羹"
+    # 显式 汤羹 优先；主食材西红柿 自动补挂 蔬菜
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["汤羹", "蔬菜"]
 
 
 def test_persist_candidate_new_category_created(db_session, no_enqueue, tavily_key):
@@ -1309,8 +1317,8 @@ def test_persist_candidate_new_category_created(db_session, no_enqueue, tavily_k
     db_session.commit()
 
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
-    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
-    assert db_session.query(RecipeCategory).get(link.category_id).name == "烧烤"
+    # 显式 烧烤（自动建）；主食材西红柿 自动补挂 蔬菜
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["烧烤", "蔬菜"]
 
 
 def test_persist_candidate_empty_category_falls_back_title(db_session, no_enqueue, tavily_key):
@@ -1325,9 +1333,44 @@ def test_persist_candidate_empty_category_falls_back_title(db_session, no_enqueu
     db_session.commit()
 
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
-    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
-    assert db_session.query(RecipeCategory).get(link.category_id).name == "炖菜"
+    # 纯空白回落标题规则 炖菜；主食材西红柿 自动补挂 蔬菜
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["炖菜", "蔬菜"]
     assert db_session.query(RecipeCategory).filter_by(name="   ").first() is None
+
+
+def test_persist_candidate_multi_category_array(db_session, no_enqueue, tavily_key):
+    """显式 category 为数组 → 逐条建 link；与主食材推导去重。"""
+    job = make_job(db_session)
+    recipe = make_recipe(title="红烧肉")
+    recipe["category"] = ["炖菜", "家常菜", "炖菜"]  # 含重复与主食材推导重复
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    # 显式 [炖菜, 家常菜] + 主食材西红柿 补挂 蔬菜
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["家常菜", "炖菜", "蔬菜"]
+
+
+def test_persist_candidate_meat_derived_from_ingredients(db_session, no_enqueue, tavily_key):
+    """无显式分类、主食材为肉 → 标题分类 + 自动补挂 肉类。"""
+    job = make_job(db_session)
+    recipe = make_recipe(title="红烧肉")
+    recipe["ingredients"] = [
+        {"name": "五花肉", "quantity": "500", "unit": "克"},
+        {"name": "冰糖", "quantity": "20", "unit": "克"},
+    ]
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    # 标题规则 红烧肉→炖菜；五花肉→肉类（冰糖 是调料/基础调味，不推导）
+    assert _recipe_category_names(db_session, candidate.recipe_id) == ["炖菜", "肉类"]
 
 
 def test_approve_merge_merges_seasonings(db_session, no_enqueue, tavily_key):

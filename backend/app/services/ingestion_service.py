@@ -9,7 +9,7 @@ from app.db.models import (
     IngestionJob, RecipeSource, Recipe, RecipeCategoryLink,
     RecipeIngredient, RecipeStep,
 )
-from app.core.category_classifier import classify_ingredient, resolve_recipe_category
+from app.core.category_classifier import classify_ingredient, resolve_recipe_categories
 from app.repositories.category_repository import resolve_category_id
 from app.repositories.ingestion_repository import IngestionRepository
 from app.repositories.ingredient_repository import IngredientRepository
@@ -136,15 +136,20 @@ class IngestionService:
             )
             recipe = self.ingestion_repository.create_recipe(recipe)
 
-            # 菜谱自动分类：显式 category 优先，新分类名自动创建；否则按标题规则（回落默认）
-            self.ingestion_repository.db.add(RecipeCategoryLink(
-                id=str(uuid.uuid4()),
-                recipe_id=recipe.id,
-                category_id=resolve_category_id(
-                    self.ingestion_repository.db, "recipe",
-                    name=resolve_recipe_category(recipe_data.title, recipe_data.category),
-                ),
-            ))
+            # 菜谱自动分类：显式 category（字符串或数组）优先，新分类名自动创建；
+            # 未提供时按标题规则；另据主食材推导「蔬菜/肉类」并入。
+            ingredient_names = [
+                ing.get("name") for ing in recipe_data.ingredients if isinstance(ing, dict)
+            ]
+            for cat_name in resolve_recipe_categories(
+                recipe_data.title, recipe_data.category, ingredient_names,
+            ):
+                self.ingestion_repository.db.add(RecipeCategoryLink(
+                    id=str(uuid.uuid4()),
+                    recipe_id=recipe.id,
+                    category_id=resolve_category_id(
+                        self.ingestion_repository.db, "recipe", name=cat_name),
+                ))
 
             # 处理食材
             for i, ing_data in enumerate(recipe_data.ingredients):

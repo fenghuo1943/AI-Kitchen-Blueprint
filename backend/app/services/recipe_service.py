@@ -3,7 +3,7 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 
-from app.core.category_classifier import classify_recipe
+from app.core.category_classifier import resolve_recipe_categories
 from app.core.pinyin import to_pinyin
 from app.db.models import Recipe, RecipeIngredient, RecipeStep
 from app.repositories.category_repository import get_default_category_id, resolve_category_id
@@ -254,11 +254,18 @@ class RecipeService:
             self.recipe_repository.add_tags(recipe_id, tags)
 
         category_ids = list(category_ids or [])
-        if not category_ids:  # 未指定分类时按标题自动分类（入库规则；未识别回落默认）
+        if not category_ids:  # 未指定分类时按标题自动分类；蔬菜/肉类按主食材自动补挂（入库规则；未识别回落默认）
             recipe = self.recipe_repository.get_by_id(recipe_id)
             title = recipe.title if recipe else None
-            category_ids = [resolve_category_id(
-                self.recipe_repository.db, "recipe", name=classify_recipe(title))]
+            ingredient_names = []
+            for ing_data in ingredients:
+                ing_obj = self.ingredient_repository.get_by_id(ing_data.ingredient_id)
+                if ing_obj:
+                    ingredient_names.append(ing_obj.canonical_name)
+            category_ids = [
+                resolve_category_id(self.recipe_repository.db, "recipe", name=n)
+                for n in resolve_recipe_categories(title, None, ingredient_names)
+            ]
         for cid in category_ids:
             self.recipe_repository.add_category(recipe_id, cid)
 
