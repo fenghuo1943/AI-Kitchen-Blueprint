@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from app.db.models import Ingredient, IngredientAlias, IngredientCategory, Recipe, RecipeIngredient
+from app.db.models import Ingredient, IngredientAlias, IngredientCategory, Recipe, RecipeIngredient, InventoryItem
 
 
 class IngredientRepository:
@@ -19,6 +19,10 @@ class IngredientRepository:
             Ingredient.id == ingredient_id,
             Ingredient.deleted_at.is_(None)
         ).first()
+
+    def get_by_id_any(self, ingredient_id: str) -> Optional[Ingredient]:
+        """根据ID获取食材（不区分软删状态，回收站恢复/彻底删除用）"""
+        return self.db.query(Ingredient).filter(Ingredient.id == ingredient_id).first()
 
     def get_by_name(self, name: str) -> Optional[Ingredient]:
         """根据标准名称获取食材"""
@@ -95,6 +99,28 @@ class IngredientRepository:
             Recipe.deleted_at.is_(None)
         ).all()
 
+    def find_recipes_by_ingredient_any(self, ingredient_id: str):
+        """查找使用了该食材的菜谱（含已软删除，回收站彻底删除前检查引用），返回 [(recipe_id, title), ...]"""
+        return self.db.query(Recipe.id, Recipe.title).join(
+            RecipeIngredient, RecipeIngredient.recipe_id == Recipe.id
+        ).filter(
+            RecipeIngredient.ingredient_id == ingredient_id
+        ).all()
+
+    def find_inventory_by_ingredient(self, ingredient_id: str):
+        """查找引用了该食材的库存记录，返回 [item, ...]"""
+        return self.db.query(InventoryItem).filter(
+            InventoryItem.ingredient_id == ingredient_id
+        ).all()
+
+    def list_deleted(self, page: int = 1, page_size: int = 20) -> Tuple[List[Ingredient], int]:
+        """列出回收站中的食材（已软删除），按删除时间倒序"""
+        base = self.db.query(Ingredient).filter(Ingredient.deleted_at.isnot(None))
+        total = base.count()
+        offset = (page - 1) * page_size
+        ingredients = base.order_by(Ingredient.deleted_at.desc()).offset(offset).limit(page_size).all()
+        return ingredients, total
+
     def soft_delete(self, ingredient_id: str) -> bool:
         """软删除食材"""
         ingredient = self.get_by_id(ingredient_id)
@@ -102,6 +128,25 @@ class IngredientRepository:
             return False
         from datetime import datetime
         ingredient.deleted_at = datetime.utcnow()
+        self.db.commit()
+        return True
+
+    def restore(self, ingredient_id: str) -> Optional[Ingredient]:
+        """恢复软删除的食材"""
+        ingredient = self.get_by_id_any(ingredient_id)
+        if not ingredient:
+            return None
+        ingredient.deleted_at = None
+        self.db.commit()
+        self.db.refresh(ingredient)
+        return ingredient
+
+    def hard_delete(self, ingredient_id: str) -> bool:
+        """彻底删除食材（别名随 ORM 级联清理）"""
+        ingredient = self.get_by_id_any(ingredient_id)
+        if not ingredient:
+            return False
+        self.db.delete(ingredient)
         self.db.commit()
         return True
 

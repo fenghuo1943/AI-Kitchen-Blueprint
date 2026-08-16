@@ -172,3 +172,80 @@ class TestSeasoningsAPI:
 
         response = client.delete(f"/api/v1/seasonings/{seasoning.id}")
         assert response.status_code == 204
+
+
+class TestSeasoningRecycleBinAPI:
+    """调料回收站 API 测试类"""
+
+    def _create_and_soft_delete(self, client, name="回收站调料"):
+        """创建调料后软删除，返回 id"""
+        created = client.post("/api/v1/seasonings", json={"canonical_name": name}).json()
+        assert client.delete(f"/api/v1/seasonings/{created['id']}").status_code == 204
+        return created["id"]
+
+    def _deleted_ids(self, client):
+        return [s["id"] for s in client.get("/api/v1/seasonings", params={"deleted": True}).json()["data"]]
+
+    def test_list_deleted_seasonings(self, client):
+        """测试列出回收站调料"""
+        sea_id = self._create_and_soft_delete(client)
+        assert sea_id in self._deleted_ids(client)
+
+        # 未删除的不出现在回收站
+        alive = client.post("/api/v1/seasonings", json={"canonical_name": "存活的调料"}).json()
+        assert alive["id"] not in self._deleted_ids(client)
+
+    def test_restore_seasoning(self, client):
+        """测试恢复回收站调料"""
+        sea_id = self._create_and_soft_delete(client)
+        resp = client.post(f"/api/v1/seasonings/{sea_id}/restore")
+        assert resp.status_code == 200
+        assert resp.json()["deleted_at"] is None
+
+        # 恢复后可正常查询，且不再出现在回收站
+        assert client.get(f"/api/v1/seasonings/{sea_id}").status_code == 200
+        assert sea_id not in self._deleted_ids(client)
+
+    def test_restore_seasoning_not_found(self, client):
+        """测试恢复不存在的调料"""
+        assert client.post("/api/v1/seasonings/nonexistent-id/restore").status_code == 404
+
+    def test_hard_delete_seasoning(self, client):
+        """测试彻底删除回收站调料"""
+        sea_id = self._create_and_soft_delete(client)
+        resp = client.delete(f"/api/v1/seasonings/{sea_id}", params={"forever": True})
+        assert resp.status_code == 204
+
+        # 彻底删除后详情与回收站均不可见
+        assert client.get(f"/api/v1/seasonings/{sea_id}").status_code == 404
+        assert sea_id not in self._deleted_ids(client)
+
+    def test_hard_delete_seasoning_in_use_by_deleted_recipe(self, client, db_session):
+        """彻底删除仍被（软删）菜谱引用的调料被拒绝"""
+        from app.db.models import Recipe, RecipeSeasoning, Seasoning
+        from datetime import datetime
+        import uuid
+
+        seasoning = Seasoning(id=str(uuid.uuid4()), canonical_name="回收站蚝油")
+        db_session.add(seasoning)
+        recipe = Recipe(id=str(uuid.uuid4()), title="软删菜谱", status="published", deleted_at=datetime.utcnow())
+        db_session.add(recipe)
+        db_session.commit()
+
+        link = RecipeSeasoning(
+            id=str(uuid.uuid4()),
+            recipe_id=recipe.id,
+            seasoning_id=seasoning.id,
+        )
+        db_session.add(link)
+        db_session.commit()
+        db_session.connection().commit()
+
+        # 仅被软删菜谱引用 → 可软删除入回收站
+        resp = client.delete(f"/api/v1/seasonings/{seasoning.id}")
+        assert resp.status_code == 204
+
+        # 但彻底删除被拒绝
+        resp = client.delete(f"/api/v1/seasonings/{seasoning.id}", params={"forever": True})
+        assert resp.status_code == 409
+        assert "引用" in resp.json()["detail"]

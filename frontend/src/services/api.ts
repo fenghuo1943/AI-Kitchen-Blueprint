@@ -49,7 +49,7 @@ api.interceptors.response.use(
 
 // 食材 API
 export const ingredientApi = {
-  list: (params?: { query?: string; category_id?: string; page?: number; page_size?: number }) =>
+  list: (params?: { query?: string; category_id?: string; deleted?: boolean; page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<Ingredient>>('/ingredients', { params }),
 
   get: (id: string) =>
@@ -61,8 +61,11 @@ export const ingredientApi = {
   update: (id: string, data: Partial<Ingredient>) =>
     api.patch<any, Ingredient>(`/ingredients/${id}`, data),
 
-  delete: (id: string) =>
-    api.delete(`/ingredients/${id}`),
+  delete: (id: string, forever = false) =>
+    api.delete(`/ingredients/${id}`, { params: { forever: forever || undefined } }),
+
+  restore: (id: string) =>
+    api.post<any, Ingredient>(`/ingredients/${id}/restore`),
 
   addAlias: (id: string, aliasName: string) =>
     api.post(`/ingredients/${id}/aliases`, null, { params: { alias_name: aliasName } }),
@@ -88,7 +91,7 @@ export const categoryApi = {
 
 // 调料 API
 export const seasoningApi = {
-  list: (params?: { query?: string; category_id?: string; page?: number; page_size?: number }) =>
+  list: (params?: { query?: string; category_id?: string; deleted?: boolean; page?: number; page_size?: number }) =>
     api.get<any, PaginatedResponse<Seasoning>>('/seasonings', { params }),
 
   getAll: () =>
@@ -103,8 +106,11 @@ export const seasoningApi = {
   update: (id: string, data: Partial<Seasoning>) =>
     api.patch<any, Seasoning>(`/seasonings/${id}`, data),
 
-  delete: (id: string) =>
-    api.delete(`/seasonings/${id}`)
+  delete: (id: string, forever = false) =>
+    api.delete(`/seasonings/${id}`, { params: { forever: forever || undefined } }),
+
+  restore: (id: string) =>
+    api.post<any, Seasoning>(`/seasonings/${id}/restore`)
 };
 
 // 菜谱 API

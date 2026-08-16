@@ -1,8 +1,19 @@
 <template>
   <div class="recycle-bin">
     <div class="header">
-      <button @click="$router.back()" class="btn-back">返回</button>
-      <h1>回收站</h1>
+      <div class="header-left">
+        <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
+        <h1>回收站</h1>
+      </div>
+    </div>
+
+    <div class="type-tabs">
+      <button
+        v-for="t in tabs"
+        :key="t.value"
+        :class="['tab-btn', activeType === t.value ? 'active' : '']"
+        @click="switchTab(t.value)"
+      >{{ t.label }}</button>
     </div>
 
     <div v-if="loading && !items.length" class="empty-state">
@@ -14,14 +25,15 @@
       <button class="btn btn-primary" @click="load">点击重试</button>
     </div>
     <div v-else-if="items.length" class="list">
-      <div v-for="recipe in items" :key="recipe.id" class="list-row">
+      <div v-for="row in items" :key="row.id" class="list-row">
         <div class="row-main">
-          <span class="row-title">{{ recipe.title }}</span>
-          <span v-if="recipe.deleted_at" class="row-time">删除于 {{ formatTime(recipe.deleted_at) }}</span>
+          <span class="row-title">{{ rowName(row) }}</span>
+          <span v-if="rowSub(row)" class="row-sub">{{ rowSub(row) }}</span>
+          <span v-if="row.deleted_at" class="row-time">删除于 {{ formatTime(row.deleted_at) }}</span>
         </div>
         <div class="row-actions">
-          <button class="btn-small btn-confirm" @click="restore(recipe.id)">恢复</button>
-          <button class="btn-small btn-danger" @click="hardDelete(recipe.id)">彻底删除</button>
+          <button class="btn-small btn-confirm" @click="restore(row.id)">恢复</button>
+          <button class="btn-small btn-danger" @click="hardDelete(row.id)">彻底删除</button>
         </div>
       </div>
     </div>
@@ -38,13 +50,27 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
-import { recipeApi } from '../services/api';
+import { ref, onMounted } from 'vue';
+import { recipeApi, ingredientApi, seasoningApi } from '../services/api';
 import { toast } from '../composables/useToast';
+import { useGoBack } from '../composables/useGoBack';
 import { usePageSize } from '../composables/usePageSize';
 import { useInfiniteList } from '../composables/useInfiniteList';
 import LoadMoreFooter from '../components/LoadMoreFooter.vue';
-import type { Recipe } from '../types';
+import type { Recipe, Ingredient, Seasoning } from '../types';
+
+const { goBack } = useGoBack('/me');
+
+/** 回收站条目类型：菜谱 / 食材 / 调料 */
+type RecycleType = 'recipe' | 'ingredient' | 'seasoning';
+type RecycleItem = Recipe | Ingredient | Seasoning;
+
+const tabs = [
+  { label: '菜谱回收站', value: 'recipe' as RecycleType },
+  { label: '食材回收站', value: 'ingredient' as RecycleType },
+  { label: '调料回收站', value: 'seasoning' as RecycleType }
+];
+const activeType = ref<RecycleType>('recipe');
 
 const { pageSize, ready: pageSizeReady } = usePageSize();
 const {
@@ -56,33 +82,71 @@ const {
   hasMore,
   reset: load,
   loadMore
-} = useInfiniteList<Recipe>({
-  fetcher: (page, pageSize) => recipeApi.list({ deleted: true, page, page_size: pageSize }),
+} = useInfiniteList<RecycleItem>({
+  fetcher: (page, pageSize) => {
+    if (activeType.value === 'recipe') {
+      return recipeApi.list({ deleted: true, page, page_size: pageSize });
+    }
+    if (activeType.value === 'ingredient') {
+      return ingredientApi.list({ deleted: true, page, page_size: pageSize });
+    }
+    return seasoningApi.list({ deleted: true, page, page_size: pageSize });
+  },
   getPageSize: () => pageSize.value
 });
+
+function rowName(row: RecycleItem) {
+  return 'title' in row ? row.title : row.canonical_name;
+}
+
+function rowSub(row: RecycleItem) {
+  return 'category_name' in row && row.category_name ? row.category_name : '';
+}
 
 function formatTime(t: string) {
   return new Date(t).toLocaleString();
 }
 
+function switchTab(type: RecycleType) {
+  if (activeType.value === type) return;
+  activeType.value = type;
+  // 切换标签清空旧数据，避免上一标签的列表短暂残留
+  items.value = [];
+  load();
+}
+
 async function restore(id: string) {
   try {
-    await recipeApi.restore(id);
+    if (activeType.value === 'recipe') {
+      await recipeApi.restore(id);
+    } else if (activeType.value === 'ingredient') {
+      await ingredientApi.restore(id);
+    } else {
+      await seasoningApi.restore(id);
+    }
     toast('已恢复');
     load();
-  } catch (e) {
+  } catch (e: any) {
     console.error('restore failed', e);
+    toast(e?.response?.data?.detail || '恢复失败', 'error');
   }
 }
 
 async function hardDelete(id: string) {
   if (!window.confirm('彻底删除后不可恢复，确定继续？')) return;
   try {
-    await recipeApi.delete(id, true);
+    if (activeType.value === 'recipe') {
+      await recipeApi.delete(id, true);
+    } else if (activeType.value === 'ingredient') {
+      await ingredientApi.delete(id, true);
+    } else {
+      await seasoningApi.delete(id, true);
+    }
     toast('已彻底删除');
     load();
-  } catch (e) {
+  } catch (e: any) {
     console.error('hard delete failed', e);
+    toast(e?.response?.data?.detail || '删除失败', 'error');
   }
 }
 
@@ -93,21 +157,9 @@ onMounted(() => {
 
 <style scoped>
 .recycle-bin { padding: 20px; }
-.header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.header { display: flex; align-items: center; margin-bottom: 16px; }
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .header h1 { margin: 0; }
-.list { background: white; border-radius: 12px; overflow: hidden; }
-.list-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 14px 16px; border-bottom: 1px solid #f0f0f0; gap: 12px;
-}
-.row-main { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.row-title { font-weight: 500; color: #333; }
-.row-time { font-size: 12px; color: #999; }
-.row-actions { display: flex; gap: 8px; }
-
-.btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
-.btn-secondary { background: #f0f0f0; color: #333; }
-.btn-primary { background: #4a90d9; color: white; }
 .btn-back {
   height: 36px;
   padding: 0 12px;
@@ -124,6 +176,33 @@ onMounted(() => {
   font-weight: 500;
 }
 .btn-back:hover { background: rgba(7, 132, 255, 0.08); }
+
+.type-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tab-btn {
+  padding: 10px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  min-height: 44px;
+}
+.tab-btn.active { background: #4a90d9; color: white; border-color: #4a90d9; }
+
+.list { background: white; border-radius: 12px; overflow: hidden; }
+.list-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; border-bottom: 1px solid #f0f0f0; gap: 12px;
+}
+.row-main { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.row-title { font-weight: 500; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 12px; color: #4a90d9; }
+.row-time { font-size: 12px; color: #999; }
+.row-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; min-height: 44px; }
+.btn-secondary { background: #f0f0f0; color: #333; }
+.btn-primary { background: #4a90d9; color: white; }
 .btn-small { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; min-height: 36px; }
 .btn-confirm { background: #4a90d9; color: white; }
 .btn-danger { background: #f44336; color: white; }
@@ -140,7 +219,12 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .recycle-bin { padding: 16px; }
-  .list-row { flex-direction: row; align-items: center; }
+  .header h1 { text-align: center; }
+  .header-left { justify-content: center; position: relative; width: 100%; }
+  .btn-back { position: absolute; left: 0; }
+  .type-tabs { width: 100%; }
+  .tab-btn { flex: 1; padding: 10px 4px; }
+  .list-row { flex-direction: row; align-items: center; gap: 8px; }
   .row-actions { flex-direction: column; align-items: stretch; gap: 6px; }
   .row-actions .btn-small { min-height: 32px; padding: 6px 12px; }
 }

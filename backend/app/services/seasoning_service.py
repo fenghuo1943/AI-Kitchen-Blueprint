@@ -82,7 +82,7 @@ class SeasoningService:
         return self._to_response(seasoning)
 
     def delete_seasoning(self, seasoning_id: str) -> bool:
-        """删除调料（软删除），若仍被菜谱使用则拒绝删除"""
+        """删除调料（软删除，进入回收站），若仍被菜谱使用则拒绝删除"""
         if not self.repository.get_by_id(seasoning_id):
             return False
         recipes = self.repository.find_recipes_by_seasoning(seasoning_id)
@@ -93,6 +93,37 @@ class SeasoningService:
             )
         return self.repository.soft_delete(seasoning_id)
 
+    def list_deleted(self, page: int = 1, page_size: int = 20) -> SeasoningListResponse:
+        """列出回收站中的调料（已软删除）"""
+        seasonings, total = self.repository.list_deleted(page=page, page_size=page_size)
+        return SeasoningListResponse(
+            data=[self._to_response(s) for s in seasonings],
+            total=total, page=page, page_size=page_size
+        )
+
+    def restore_seasoning(self, seasoning_id: str) -> Optional[SeasoningResponse]:
+        """恢复回收站中的调料"""
+        try:
+            seasoning = self.repository.restore(seasoning_id)
+        except IntegrityError as e:
+            self.db.rollback()
+            raise ValueError("同名调料已存在，无法恢复") from e
+        if not seasoning:
+            return None
+        return self._to_response(seasoning)
+
+    def hard_delete_seasoning(self, seasoning_id: str) -> bool:
+        """彻底删除回收站中的调料，仍被菜谱引用时拒绝"""
+        if not self.repository.get_by_id_any(seasoning_id):
+            return False
+        recipes = self.repository.find_recipes_by_seasoning_any(seasoning_id)
+        if recipes:
+            titles = "、".join(title for _, title in recipes)
+            raise ValueError(
+                f"该调料仍被 {len(recipes)} 个菜谱引用（{titles}），无法彻底删除"
+            )
+        return self.repository.hard_delete(seasoning_id)
+
     def _to_response(self, seasoning: Seasoning) -> SeasoningResponse:
         return SeasoningResponse(
             id=seasoning.id,
@@ -100,6 +131,7 @@ class SeasoningService:
             pinyin=seasoning.pinyin,
             category_id=seasoning.category_id,
             category_name=self.repository.get_category_name(seasoning.category_id),
+            deleted_at=seasoning.deleted_at,
             created_at=seasoning.created_at,
             updated_at=seasoning.updated_at,
         )

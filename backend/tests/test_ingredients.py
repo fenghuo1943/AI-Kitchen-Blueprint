@@ -178,3 +178,70 @@ class TestIngredientsAPI:
         data = response.json()
         assert data["total"] == 1
         assert data["data"][0]["canonical_name"] == "菠菜"
+
+
+class TestIngredientRecycleBinAPI:
+    """食材回收站 API 测试类"""
+
+    def _create_and_soft_delete(self, client, name="回收站食材"):
+        """创建食材后软删除，返回 id"""
+        created = client.post("/api/v1/ingredients", json={"canonical_name": name}).json()
+        assert client.delete(f"/api/v1/ingredients/{created['id']}").status_code == 204
+        return created["id"]
+
+    def _deleted_ids(self, client):
+        return [i["id"] for i in client.get("/api/v1/ingredients", params={"deleted": True}).json()["data"]]
+
+    def test_list_deleted_ingredients(self, client):
+        """测试列出回收站食材"""
+        ing_id = self._create_and_soft_delete(client)
+        assert ing_id in self._deleted_ids(client)
+
+        # 未删除的不出现在回收站
+        alive = client.post("/api/v1/ingredients", json={"canonical_name": "存活的食材"}).json()
+        assert alive["id"] not in self._deleted_ids(client)
+
+    def test_restore_ingredient(self, client):
+        """测试恢复回收站食材"""
+        ing_id = self._create_and_soft_delete(client)
+        resp = client.post(f"/api/v1/ingredients/{ing_id}/restore")
+        assert resp.status_code == 200
+        assert resp.json()["deleted_at"] is None
+
+        # 恢复后可正常查询，且不再出现在回收站
+        assert client.get(f"/api/v1/ingredients/{ing_id}").status_code == 200
+        assert ing_id not in self._deleted_ids(client)
+
+    def test_restore_ingredient_not_found(self, client):
+        """测试恢复不存在的食材"""
+        assert client.post("/api/v1/ingredients/nonexistent-id/restore").status_code == 404
+
+    def test_hard_delete_ingredient(self, client):
+        """测试彻底删除回收站食材"""
+        ing_id = self._create_and_soft_delete(client)
+        resp = client.delete(f"/api/v1/ingredients/{ing_id}", params={"forever": True})
+        assert resp.status_code == 204
+
+        # 彻底删除后详情与回收站均不可见
+        assert client.get(f"/api/v1/ingredients/{ing_id}").status_code == 404
+        assert ing_id not in self._deleted_ids(client)
+
+    def test_hard_delete_ingredient_not_found(self, client):
+        """测试彻底删除不存在的食材"""
+        assert client.delete("/api/v1/ingredients/nonexistent-id", params={"forever": True}).status_code == 404
+
+    def test_hard_delete_ingredient_in_use_by_deleted_recipe(self, client, sample_ingredient, sample_recipe, db_session):
+        """彻底删除仍被（软删）菜谱引用的食材被拒绝"""
+        from datetime import datetime
+        sample_recipe.deleted_at = datetime.utcnow()
+        db_session.commit()
+        db_session.connection().commit()
+
+        # 仅被软删菜谱引用 → 可软删除入回收站
+        resp = client.delete(f"/api/v1/ingredients/{sample_ingredient.id}")
+        assert resp.status_code == 204
+
+        # 但彻底删除被拒绝
+        resp = client.delete(f"/api/v1/ingredients/{sample_ingredient.id}", params={"forever": True})
+        assert resp.status_code == 409
+        assert "引用" in resp.json()["detail"]

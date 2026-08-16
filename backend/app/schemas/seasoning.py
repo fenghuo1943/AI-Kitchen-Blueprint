@@ -28,6 +28,7 @@ class SeasoningResponse(BaseModel):
     pinyin: Optional[str]
     category_id: Optional[str]
     category_name: Optional[str]
+    deleted_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

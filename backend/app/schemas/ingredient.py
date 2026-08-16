@@ -45,6 +45,7 @@ class IngredientResponse(IngredientBase):
     pinyin: Optional[str]
     category_name: Optional[str]
     aliases: List[IngredientAliasResponse] = []
+    deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

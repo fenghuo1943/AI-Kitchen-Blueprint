@@ -4,6 +4,8 @@ import uuid
 from typing import Optional, List
 from datetime import datetime
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.category_classifier import classify_ingredient
 from app.core.pinyin import to_pinyin
 from app.db.models import Ingredient, IngredientAlias
@@ -112,7 +114,7 @@ class IngredientService:
         return self._to_response(ingredient)
 
     def delete_ingredient(self, ingredient_id: str) -> bool:
-        """删除食材（软删除），若仍被菜谱使用则拒绝删除"""
+        """删除食材（软删除，进入回收站），若仍被菜谱使用则拒绝删除"""
         if not self.repository.get_by_id(ingredient_id):
             return False
         recipes = self.repository.find_recipes_by_ingredient(ingredient_id)
@@ -122,6 +124,42 @@ class IngredientService:
                 f"该食材已被 {len(recipes)} 个菜谱使用（{titles}），请先修改或删除这些菜谱后再试"
             )
         return self.repository.soft_delete(ingredient_id)
+
+    def list_deleted(self, page: int = 1, page_size: int = 20) -> IngredientListResponse:
+        """列出回收站中的食材（已软删除）"""
+        ingredients, total = self.repository.list_deleted(page=page, page_size=page_size)
+        return IngredientListResponse(
+            data=[self._to_response(i) for i in ingredients],
+            total=total, page=page, page_size=page_size
+        )
+
+    def restore_ingredient(self, ingredient_id: str) -> Optional[IngredientResponse]:
+        """恢复回收站中的食材"""
+        try:
+            ingredient = self.repository.restore(ingredient_id)
+        except IntegrityError as e:
+            self.repository.db.rollback()
+            raise ValueError("同名食材已存在，无法恢复") from e
+        if not ingredient:
+            return None
+        return self._to_response(ingredient)
+
+    def hard_delete_ingredient(self, ingredient_id: str) -> bool:
+        """彻底删除回收站中的食材，仍被菜谱或库存引用时拒绝"""
+        if not self.repository.get_by_id_any(ingredient_id):
+            return False
+        recipes = self.repository.find_recipes_by_ingredient_any(ingredient_id)
+        if recipes:
+            titles = "、".join(title for _, title in recipes)
+            raise ValueError(
+                f"该食材仍被 {len(recipes)} 个菜谱引用（{titles}），无法彻底删除"
+            )
+        inventory = self.repository.find_inventory_by_ingredient(ingredient_id)
+        if inventory:
+            raise ValueError(
+                f"该食材仍被 {len(inventory)} 条库存记录引用，无法彻底删除"
+            )
+        return self.repository.hard_delete(ingredient_id)
 
     def add_alias(self, ingredient_id: str, alias_name: str) -> Optional[IngredientAlias]:
         """添加别名"""
@@ -178,6 +216,7 @@ class IngredientService:
                 {"id": a.id, "alias": a.alias, "created_at": a.created_at}
                 for a in aliases
             ],
+            deleted_at=ingredient.deleted_at,
             created_at=ingredient.created_at,
             updated_at=ingredient.updated_at
         )

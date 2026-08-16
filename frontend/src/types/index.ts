@@ -24,6 +24,7 @@ export interface Ingredient {
   nutrition_ref?: string;
   confidence_status: string;
   aliases: IngredientAlias[];
+  deleted_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,7 @@ export interface Seasoning {
   pinyin?: string;
   category_id?: string;
   category_name?: string;
+  deleted_at?: string;
   created_at: string;
   updated_at: string;
 }
