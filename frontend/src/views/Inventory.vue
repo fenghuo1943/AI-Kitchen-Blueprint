@@ -70,12 +70,12 @@
         <form @submit.prevent="saveItem">
           <div class="form-group">
             <label>食材 *</label>
-            <select v-model="itemForm.ingredient_id" required>
-              <option value="">请选择食材</option>
-              <option v-for="ing in availableIngredients" :key="ing.id" :value="ing.id">
-                {{ ing.canonical_name }}
-              </option>
-            </select>
+            <AppSelect
+              v-model="itemForm.ingredient_id"
+              :options="ingredientOptions"
+              placeholder="请选择食材"
+              search-placeholder="搜索食材..."
+            />
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -107,18 +107,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { inventoryApi, ingredientApi } from '../services/api';
+import { toast } from '../composables/useToast';
 import { usePageSize } from '../composables/usePageSize';
 import { useInfiniteList } from '../composables/useInfiniteList';
 import LoadMoreFooter from '../components/LoadMoreFooter.vue';
+import AppSelect from '../components/AppSelect.vue';
 import type { InventoryItem, Ingredient } from '../types';
 
 const { goBack } = useGoBack('/me');
 
 const expiringItems = ref<InventoryItem[]>([]);
 const availableIngredients = ref<Ingredient[]>([]);
+
+// 食材下拉选项，首项“请选择食材”用于占位（必填校验在 saveItem 中处理）
+const ingredientOptions = computed(() => [
+  { value: '', label: '请选择食材' },
+  ...availableIngredients.value.map(ing => ({ value: ing.id, label: ing.canonical_name }))
+]);
 const { pageSize, ready: pageSizeReady } = usePageSize();
 const {
   items: inventoryItems,
@@ -180,6 +188,10 @@ function editItem(item: InventoryItem) {
 }
 
 async function saveItem() {
+  if (!itemForm.value.ingredient_id) {
+    toast('请选择食材', 'error');
+    return;
+  }
   try {
     if (editingItem.value) {
       await inventoryApi.updateItem(editingItem.value.id, {

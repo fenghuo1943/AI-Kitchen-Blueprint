@@ -91,10 +91,12 @@
           </div>
           <div class="form-group">
             <label>分类</label>
-            <select v-model="ingredientForm.category_id">
-              <option value="">请选择</option>
-              <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-            </select>
+            <AppSelect
+              v-model="ingredientForm.category_id"
+              :options="categoryOptions"
+              placeholder="请选择"
+              search-placeholder="搜索分类..."
+            />
           </div>
           <div class="form-group">
             <label>应季月份 (1-12，逗号分隔)</label>
@@ -139,13 +141,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { ingredientApi, categoryApi } from '../services/api';
 import { toast } from '../composables/useToast';
 import { usePageSize } from '../composables/usePageSize';
 import { useInfiniteList } from '../composables/useInfiniteList';
 import LoadMoreFooter from '../components/LoadMoreFooter.vue';
+import AppSelect from '../components/AppSelect.vue';
 import type { Ingredient, IngredientAlias, Category } from '../types';
 
 const { goBack } = useGoBack('/me');
@@ -182,6 +185,12 @@ const seasonInput = ref('');
 const allergenInput = ref('');
 
 const categories = ref<Category[]>([]);
+
+// 分类下拉选项，首项“请选择”用于清空分类
+const categoryOptions = computed(() => [
+  { value: '', label: '请选择' },
+  ...categories.value.map(c => ({ value: c.id, label: c.name }))
+]);
 
 const ingredientForm = ref({
   canonical_name: '',

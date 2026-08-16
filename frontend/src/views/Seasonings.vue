@@ -56,10 +56,12 @@
           </div>
           <div class="form-group">
             <label>分类</label>
-            <select v-model="seasoningForm.category_id">
-              <option value="">默认分类</option>
-              <option v-for="c in seaCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+            <AppSelect
+              v-model="seasoningForm.category_id"
+              :options="seaCategoryOptions"
+              placeholder="默认分类"
+              search-placeholder="搜索分类..."
+            />
           </div>
           <div class="modal-actions">
             <button type="button" @click="closeModal" class="btn btn-secondary">取消</button>
@@ -72,16 +74,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useGoBack } from '../composables/useGoBack';
 import { seasoningApi, categoryApi } from '../services/api';
 import { toast } from '../composables/useToast';
+import AppSelect from '../components/AppSelect.vue';
 import type { Seasoning, Category } from '../types';
 
 const { goBack } = useGoBack('/me');
 
 const seasonings = ref<Seasoning[]>([]);
 const seaCategories = ref<Category[]>([]);
+
+// 调料分类下拉选项，首项“默认分类”用于清空分类
+const seaCategoryOptions = computed(() => [
+  { value: '', label: '默认分类' },
+  ...seaCategories.value.map(c => ({ value: c.id, label: c.name }))
+]);
 const query = ref('');
 const categoryFilter = ref('');
 const showModal = ref(false);
