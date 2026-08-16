@@ -238,7 +238,7 @@ onMounted(loadStatus);
 </script>
 
 <style scoped>
-.rag { padding: 20px; max-width: 900px; }
+.rag { padding: 20px; max-width: 900px; margin: 0 auto; }
 .header {
   position: sticky;
   top: var(--navbar-height, 64px);

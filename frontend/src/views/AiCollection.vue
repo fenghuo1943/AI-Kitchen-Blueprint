@@ -674,7 +674,7 @@ onUnmounted(stopPolling);
 </script>
 
 <style scoped>
-.ai-collect { padding: 20px; max-width: 900px; }
+.ai-collect { padding: 20px; max-width: 900px; margin: 0 auto; }
 .header {
   position: sticky;
   top: var(--navbar-height, 64px);
