@@ -359,15 +359,31 @@ def classify_recipe(title: str, ingredient_names: Optional[List[str]] = None) ->
     return "家常菜"
 
 
+# 显式分类长度上限：正常分类名很短，超长视为不可信输入（防幻觉长串/病态粘贴）
+_MAX_CATEGORY_LENGTH = 24
+
+
+def _sanitize_category(category) -> str:
+    """显式分类清洗：仅接受字符串；去首尾并折叠内部空白；超长拒绝。清洗后非空才有效。"""
+    if not isinstance(category, str):
+        return ""
+    name = category.strip()
+    if not name:
+        return ""
+    name = " ".join(name.split())
+    if len(name) > _MAX_CATEGORY_LENGTH:
+        return ""
+    return name
+
+
 def resolve_recipe_category(title: str, explicit: Optional[str] = None) -> str:
     """菜谱归类统一入口：显式 category（JSON 直入提供）优先，否则按标题规则。
 
-    explicit 必须落在规范菜谱分类清单（RECIPE_CATEGORIES）内才被采用，
-    否则视为不可信输入回落标题规则——防止拼写错误/非法值被落成新分类。
-    显式值转 str 再比对，兼容 JSON 里 category 为数字/布尔等非字符串的情况。
+    显式分类仅做基本清洗（字符串类型、去首尾/折叠空白、长度上限）后即采用——
+    DB 未收录的新分类名由调用方 resolve_category_id 自动创建（允许 AI 新增分类）；
+    空/非字符串/超长等不可信输入回落标题规则。
     """
-    if explicit:
-        name = str(explicit or "").strip()
-        if name in RECIPE_CATEGORIES:
-            return name
+    name = _sanitize_category(explicit)
+    if name:
+        return name
     return classify_recipe(title)

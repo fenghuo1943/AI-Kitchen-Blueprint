@@ -136,7 +136,7 @@ class IngestionService:
             )
             recipe = self.ingestion_repository.create_recipe(recipe)
 
-            # 菜谱自动分类：显式 category 优先，否则按标题规则（未识别回落默认）
+            # 菜谱自动分类：显式 category 优先，新分类名自动创建；否则按标题规则（回落默认）
             self.ingestion_repository.db.add(RecipeCategoryLink(
                 id=str(uuid.uuid4()),
                 recipe_id=recipe.id,

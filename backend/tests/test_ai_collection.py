@@ -1297,11 +1297,27 @@ def test_persist_candidate_explicit_category_wins(db_session, no_enqueue, tavily
     assert db_session.query(RecipeCategory).get(link.category_id).name == "汤羹"
 
 
-def test_persist_candidate_invalid_category_falls_back_title(db_session, no_enqueue, tavily_key):
-    """显式 category 不在规范清单内 → 回落标题规则，不落成新分类。"""
+def test_persist_candidate_new_category_created(db_session, no_enqueue, tavily_key):
+    """显式 category 为 DB 未收录的新分类名 → 自动创建该分类并挂上，而非回落标题。"""
+    job = make_job(db_session)
+    recipe = make_recipe(title="羊肉串")
+    recipe["category"] = "烧烤"  # DB 未收录的新分类
+
+    service = make_service()
+    dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
+    service._persist_candidate(db_session, job, recipe, [recipe["source_url"]], dedup, {})
+    db_session.commit()
+
+    candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
+    link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
+    assert db_session.query(RecipeCategory).get(link.category_id).name == "烧烤"
+
+
+def test_persist_candidate_empty_category_falls_back_title(db_session, no_enqueue, tavily_key):
+    """显式 category 为纯空白等不可信输入 → 回落标题规则，不创建脏分类。"""
     job = make_job(db_session)
     recipe = make_recipe(title="红烧肉")
-    recipe["category"] = "烫羹"  # 拼错的分类名
+    recipe["category"] = "   "  # 纯空白
 
     service = make_service()
     dedup = hashlib.sha256(normalize_title(recipe["title"]).encode()).hexdigest()
@@ -1311,6 +1327,7 @@ def test_persist_candidate_invalid_category_falls_back_title(db_session, no_enqu
     candidate = db_session.query(IngestionCandidate).filter_by(job_id=job.id).first()
     link = db_session.query(RecipeCategoryLink).filter_by(recipe_id=candidate.recipe_id).first()
     assert db_session.query(RecipeCategory).get(link.category_id).name == "炖菜"
+    assert db_session.query(RecipeCategory).filter_by(name="   ").first() is None
 
 
 def test_approve_merge_merges_seasonings(db_session, no_enqueue, tavily_key):

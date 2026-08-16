@@ -620,7 +620,7 @@ class AiCollectionService:
         db.add(cand_recipe)
         db.flush()
 
-        # 采集菜谱自动分类：显式 category（结构化 JSON 提供）优先，否则按标题规则（未识别回落默认）
+        # 采集菜谱自动分类：显式 category（结构化 JSON 提供）优先，新分类名自动创建；否则按标题规则（回落默认）
         db.add(RecipeCategoryLink(
             id=str(uuid.uuid4()),
             recipe_id=cand_recipe.id,
