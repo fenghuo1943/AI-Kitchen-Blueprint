@@ -5,6 +5,14 @@
         <button @click="goBack" class="btn-back" aria-label="返回">返回</button>
         <h1>回收站</h1>
       </div>
+      <div class="header-actions">
+        <button
+          v-if="!selecting"
+          class="btn btn-danger"
+          :disabled="!items.length"
+          @click="enterSelect"
+        >批量删除</button>
+      </div>
     </div>
 
     <div class="type-tabs">
@@ -16,23 +24,20 @@
       >{{ t.label }}</button>
     </div>
 
-    <div class="toolbar">
-      <template v-if="selecting">
-        <label class="select-all">
-          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
-          <span>全选</span>
-        </label>
-        <span class="selected-count">已选 {{ selectedIds.size }} 项</span>
-        <div class="toolbar-actions">
-          <button
-            class="btn btn-danger"
-            :disabled="!selectedIds.size"
-            @click="batchHardDelete"
-          >批量彻底删除</button>
-          <button class="btn btn-secondary" @click="exitSelect">取消</button>
-        </div>
-      </template>
-      <button v-else class="btn btn-secondary" :disabled="!items.length" @click="enterSelect">批量删除</button>
+    <div v-if="selecting" class="toolbar">
+      <label class="select-all">
+        <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        <span>全选</span>
+      </label>
+      <span class="selected-count">已选 {{ selectedIds.size }} 项</span>
+      <div class="toolbar-actions">
+        <button
+          class="btn btn-danger"
+          :disabled="!selectedIds.size"
+          @click="batchHardDelete"
+        >批量彻底删除</button>
+        <button class="btn btn-secondary" @click="exitSelect">取消</button>
+      </div>
     </div>
 
     <div v-if="loading && !items.length" class="empty-state">
@@ -245,7 +250,8 @@ onMounted(() => {
 
 <style scoped>
 .recycle-bin { padding: 20px; }
-.header { display: flex; align-items: center; margin-bottom: 16px; }
+.header { display: flex; align-items: center; margin-bottom: 16px; gap: 12px; }
+.header-actions { flex-shrink: 0; }
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .header h1 { margin: 0; }
 .btn-back {
@@ -315,9 +321,12 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .recycle-bin { padding: 16px; }
+  .header { position: relative; }
   .header h1 { text-align: center; }
   .header-left { justify-content: center; position: relative; width: 100%; }
   .btn-back { position: absolute; left: 0; }
+  .header-actions { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .header-actions .btn { min-height: 36px; padding: 0 12px; font-size: 13px; }
   .type-tabs { width: 100%; }
   .tab-btn { flex: 1; padding: 10px 4px; }
   .toolbar-actions { margin-left: 0; width: 100%; }
